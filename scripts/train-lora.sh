@@ -15,17 +15,17 @@ echo "=== Anomaly Analyzer LoRA Training ==="
 echo ""
 
 # Check for training data
-if [ ! -f "data/training-examples.json" ] && [ ! -f "data/training-data.jsonl" ]; then
+if [ ! -f "data/ttraining-data-axolotljsonl" ] && [ ! -f "data/training-data-axolotl.json" ]; then
     echo "❌ No training data found!"
     echo ""
     echo "Export training data first:"
-    echo "  curl http://localhost:5000/api/monitor/training/export > data/training-data.jsonl"
+    echo "  curl http://localhost:5000/api/v1/monitor/training/export > data/training-data.jsonl"
     exit 1
 fi
 
 # Convert training data
 echo "📦 Converting training data to Axolotl format..."
-node scripts/convert-training-data.js
+npx tsx scripts/convert-training-data.cjs
 
 # Check example count
 EXAMPLES=$(wc -l < data/training-data-axolotl.jsonl)

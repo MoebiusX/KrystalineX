@@ -66,14 +66,16 @@ Analyze → User Rates → Store to JSON → Export JSONL
 
 ### 3. Fine-Tuning Pipeline
 
-**Created Files:**
+**Key Files:**
 
 | File | Purpose |
 |------|---------|
-| [FINE-TUNING.md](file:///c:/Users/bizai/Documents/GitHub/OtelE2E/docs/FINE-TUNING.md) | Step-by-step guide |
-| [convert-training-data.js](file:///c:/Users/bizai/Documents/GitHub/OtelE2E/scripts/convert-training-data.js) | Data format converter |
-| [axolotl-config.yaml](file:///c:/Users/bizai/Documents/GitHub/OtelE2E/axolotl-config.yaml) | LoRA training config |
-| [train-lora.sh](file:///c:/Users/bizai/Documents/GitHub/OtelE2E/scripts/train-lora.sh) | Training wrapper script |
+| [04_FINE_TUNING.md](file:///c:/Users/bizai/Documents/GitHub/KrystalineX/docs/observability/04_FINE_TUNING.md) | Step-by-step guide |
+| [generate-synthetic-training.cjs](file:///c:/Users/bizai/Documents/GitHub/KrystalineX/scripts/generate-synthetic-training.cjs) | Synthetic data generator (100+ samples) |
+| [validate-training-data.cjs](file:///c:/Users/bizai/Documents/GitHub/KrystalineX/scripts/validate-training-data.cjs) | Dataset validation script |
+| [generate-training-data.py](file:///c:/Users/bizai/Documents/GitHub/KrystalineX/scripts/generate-training-data.py) | Hand-crafted real examples (22 samples) |
+| [axolotl-config.yaml](file:///c:/Users/bizai/Documents/GitHub/KrystalineX/axolotl-config.yaml) | LoRA training config |
+| [retrain-model.sh](file:///c:/Users/bizai/Documents/GitHub/KrystalineX/scripts/retrain-model.sh) | Training pipeline script |
 
 **Training Stack:**
 - **Axolotl** for LoRA fine-tuning
@@ -113,13 +115,19 @@ flowchart TB
 
 ```bash
 # View training stats
-curl http://localhost:5000/api/monitor/training/stats
+curl http://localhost:5000/api/v1/monitor/training/stats
 
-# Export training data
-curl http://localhost:5000/api/monitor/training/export > training-data.jsonl
+# Export training data from running app
+curl http://localhost:5000/api/v1/monitor/training/export > training-data-export.jsonl
 
-# Run training (when ready)
-./scripts/train-lora.sh
+# Generate synthetic training data (100 samples) and merge with real data
+node scripts/generate-synthetic-training.cjs --count 100
+
+# Validate combined dataset
+node scripts/validate-training-data.cjs
+
+# Run training pipeline
+./scripts/retrain-model.sh
 ```
 
 ---

@@ -28,7 +28,7 @@ echo.
 echo [4/4] Starting development environment...
 echo.
 echo ========================================
-start "KrystalineX Dev Server" cmd /k npm run dev
+start "KrystalineX Dev Server" cmd /k call npm run dev
 echo       Dev server started in new window
 echo.
 echo ========================================

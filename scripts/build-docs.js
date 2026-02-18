@@ -16,6 +16,12 @@ const documents = [
     out: 'observability-article.html',
     title: 'Building Observable Microservices',
     subtitle: 'A practical guide to distributed tracing and intelligent anomaly detection.'
+  },
+  {
+    md: 'Krystaline-Audit-Medium.md',
+    out: 'krystaline-audit.html',
+    title: 'Lessons from a Day: Auditing and Hardening a TypeScript Trading App',
+    subtitle: 'How focused observability, safe fixes, and incremental monitoring made a complex app more resilient.'
   }
 ];
 

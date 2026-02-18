@@ -48,21 +48,21 @@ Write-Log "Backup directory: $BackupDir" "INFO"
 # Database configurations
 $databases = @(
     @{ 
-        Container = "app-database"
+        Service = "app-database"
         User = "exchange"
         Database = "crypto_exchange"
         Priority = "CRITICAL"
         Description = "User accounts, wallets, orders, trades"
     },
     @{ 
-        Container = "kong-database"
+        Service = "kong-database"
         User = "kong"
         Database = "kong"
         Priority = "HIGH"
         Description = "API Gateway configuration"
     },
     @{ 
-        Container = "goalert-db"
+        Service = "goalert-db"
         User = "goalert"
         Database = "goalert"
         Priority = "MEDIUM"
@@ -84,24 +84,24 @@ foreach ($db in $databases) {
     Write-Log "Backing up $($db.Database) [$($db.Priority)]..." "INFO"
     
     try {
-        # Check if container is running
-        $containerState = docker inspect -f '{{.State.Running}}' $db.Container 2>$null
-        if ($containerState -ne "true") {
-            throw "Container $($db.Container) is not running"
+        # Check if service is running
+        $containerState = docker compose ps --status running --format '{{.Service}}' 2>$null | Select-String -SimpleMatch $db.Service
+        if (-not $containerState) {
+            throw "Service $($db.Service) is not running"
         }
         
         $startTime = Get-Date
         
         # Create backup inside container
-        docker exec $db.Container pg_dump -U $db.User -d $db.Database -F c -f /tmp/backup.dump 2>$null
+        docker compose exec -T $db.Service pg_dump -U $db.User -d $db.Database -F c -f /tmp/backup.dump 2>$null
         if ($LASTEXITCODE -ne 0) { throw "pg_dump failed" }
         
         # Copy to host
-        docker cp "$($db.Container):/tmp/backup.dump" $backupFile 2>$null
+        docker compose cp "$($db.Service):/tmp/backup.dump" $backupFile 2>$null
         if ($LASTEXITCODE -ne 0) { throw "docker cp failed" }
         
         # Clean up container
-        docker exec $db.Container rm -f /tmp/backup.dump 2>$null
+        docker compose exec -T $db.Service rm -f /tmp/backup.dump 2>$null
         
         $endTime = Get-Date
         $duration = ($endTime - $startTime).TotalSeconds
@@ -127,10 +127,10 @@ foreach ($db in $databases) {
         # Verify backup if requested
         if ($Verify) {
             Write-Log "  Verifying backup..." "INFO"
-            $verifyResult = docker exec $db.Container pg_restore -l /tmp/backup.dump 2>&1
-            docker cp $backupFile "$($db.Container):/tmp/backup.dump" 2>$null
-            $tableCount = (docker exec $db.Container pg_restore -l /tmp/backup.dump 2>$null | Select-String "TABLE").Count
-            docker exec $db.Container rm -f /tmp/backup.dump 2>$null
+            $verifyResult = docker compose exec -T $db.Service pg_restore -l /tmp/backup.dump 2>&1
+            docker compose cp $backupFile "$($db.Service):/tmp/backup.dump" 2>$null
+            $tableCount = (docker compose exec -T $db.Service pg_restore -l /tmp/backup.dump 2>$null | Select-String "TABLE").Count
+            docker compose exec -T $db.Service rm -f /tmp/backup.dump 2>$null
             Write-Log "  Verified: $tableCount tables in backup" "SUCCESS"
         }
     }
