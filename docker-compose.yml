@@ -182,16 +182,39 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:1b}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Start Ollama server in background
+        /bin/ollama serve &
+        # Wait for Ollama to be ready
+        echo "Waiting for Ollama server to start..."
+        until curl -sf http://localhost:11434/ > /dev/null 2>&1; do
+          sleep 1
+        done
+        echo "Ollama server is ready. Pulling model: $${OLLAMA_MODEL}..."
+        ollama pull $${OLLAMA_MODEL}
+        echo "Model $${OLLAMA_MODEL} pulled successfully. Ollama is ready."
+        # Keep the container running by waiting on the background server
+        wait
     networks:
       - kong-net
     restart: unless-stopped
-    # Note: GPU support removed for stability. Add back 'deploy' section if NVIDIA GPU available.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 120s
 
   # Prometheus - Metrics collection and storage
   prometheus:
@@ -269,7 +292,6 @@ services:
   # GoAlert Database - Incident management
   goalert-db:
     image: postgres:17-alpine
-    container_name: goalert-db
     restart: always
     environment:
       POSTGRES_USER: goalert
@@ -288,7 +310,6 @@ services:
   # GoAlert - Incident management and on-call scheduling
   goalert:
     image: goalert/goalert:latest
-    container_name: goalert
     restart: always
     depends_on:
       goalert-db:

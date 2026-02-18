@@ -85,8 +85,8 @@ docker exec kong-database pg_dump -U kong -d kong -F c -f /tmp/backup.dump
 docker cp kong-database:/tmp/backup.dump "./backups/kong-$timestamp.dump"
 
 # Backup GoAlert database
-docker exec goalert-db pg_dump -U goalert -d goalert -F c -f /tmp/backup.dump
-docker cp goalert-db:/tmp/backup.dump "./backups/goalert-$timestamp.dump"
+docker compose exec -T goalert-db pg_dump -U goalert -d goalert -F c -f /tmp/backup.dump
+docker compose cp goalert-db:/tmp/backup.dump "./backups/goalert-$timestamp.dump"
 
 Write-Host "✅ Backups completed: ./backups/*-$timestamp.dump"
 ```
@@ -249,9 +249,9 @@ Write-Host "🔄 Starting database backups at $(Get-Date)"
 
 # Backup configurations
 $databases = @(
-    @{ Container = "app-database"; User = "exchange"; Database = "crypto_exchange"; Priority = "critical" },
-    @{ Container = "kong-database"; User = "kong"; Database = "kong"; Priority = "high" },
-    @{ Container = "goalert-db"; User = "goalert"; Database = "goalert"; Priority = "medium" }
+    @{ Service = "app-database"; User = "exchange"; Database = "crypto_exchange"; Priority = "critical" },
+    @{ Service = "kong-database"; User = "kong"; Database = "kong"; Priority = "high" },
+    @{ Service = "goalert-db"; User = "goalert"; Database = "goalert"; Priority = "medium" }
 )
 
 foreach ($db in $databases) {
@@ -261,13 +261,13 @@ foreach ($db in $databases) {
     
     try {
         # Create backup inside container
-        docker exec $db.Container pg_dump -U $db.User -d $db.Database -F c -f /tmp/backup.dump
+        docker compose exec -T $db.Service pg_dump -U $db.User -d $db.Database -F c -f /tmp/backup.dump
         
         # Copy to host
-        docker cp "$($db.Container):/tmp/backup.dump" $backupFile
+        docker compose cp "$($db.Service):/tmp/backup.dump" $backupFile
         
         # Clean up container
-        docker exec $db.Container rm /tmp/backup.dump
+        docker compose exec -T $db.Service rm /tmp/backup.dump
         
         $size = (Get-Item $backupFile).Length / 1MB
         Write-Host "    ✅ $($db.Database): $([math]::Round($size, 2)) MB"

@@ -115,9 +115,9 @@ export class AnalysisService {
     ): Promise<AnalysisResponse> {
         const prompt = this.buildPrompt(anomaly, fullTrace, metrics);
 
-        // Add 30-second timeout to prevent hanging
+        // Add 120-second timeout to accommodate model cold starts
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const timeoutId = setTimeout(() => controller.abort(), 120000);
 
         try {
             const response = await fetch(`${OLLAMA_URL}/api/generate`, {
@@ -144,6 +144,14 @@ export class AnalysisService {
             const data = await response.json();
             const llmResponse = data.response || '';
 
+            logger.info({
+                model: MODEL,
+                responseLength: llmResponse.length,
+                hasContent: llmResponse.length > 0,
+                totalDuration: data.total_duration ? `${(data.total_duration / 1e9).toFixed(1)}s` : 'N/A',
+                preview: llmResponse.substring(0, 100),
+            }, 'Ollama response received');
+
             // Parse and return with prompt + raw response for training data
             const analysis = this.parseResponse(anomaly.traceId, llmResponse);
             analysis.prompt = prompt;           // Exact prompt sent to LLM
@@ -152,7 +160,7 @@ export class AnalysisService {
         } catch (error: unknown) {
             clearTimeout(timeoutId);
             if (error instanceof Error && error.name === 'AbortError') {
-                throw new Error('Ollama request timed out after 30 seconds');
+                throw new Error('Ollama request timed out after 120 seconds');
             }
             throw error;
         }
@@ -250,19 +258,36 @@ ${spans.length > 10 ? `... and ${spans.length - 10} more spans` : ''}`;
         const summaryMatch = response.match(/SUMMARY:\s*(.+?)(?=\n|CAUSES:|$)/i);
         const causesMatch = response.match(/CAUSES:\s*([\s\S]+?)(?=RECOMMENDATIONS:|CONFIDENCE:|$)/i);
         const recsMatch = response.match(/RECOMMENDATIONS:\s*([\s\S]+?)(?=CONFIDENCE:|$)/i);
-        const confMatch = response.match(/CONFIDENCE:\s*(low|medium|high)/i);
+        const confMatch = response.match(/CONFIDENCE:?\s*(low|medium|high)/i);
+
+        // Fallback: if no SUMMARY: prefix, grab any text before CAUSES: as summary
+        let summary = summaryMatch?.[1]?.trim();
+        if (!summary) {
+            const fallbackSummary = response.match(/^([\s\S]+?)(?=CAUSES:|POSSIBLE CAUSES:|$)/i);
+            if (fallbackSummary?.[1]) {
+                summary = fallbackSummary[1]
+                    .replace(/^[-•*\s]+/, '')
+                    .replace(/\n+/g, ' ')
+                    .trim();
+            }
+        }
 
         const extractBullets = (text: string | undefined): string[] => {
             if (!text) return [];
             return text
                 .split('\n')
                 .map(line => line.replace(/^[-•*]\s*/, '').trim())
-                .filter(line => line.length > 0 && !line.startsWith('CAUSES') && !line.startsWith('RECOMMENDATIONS'));
+                .filter(line =>
+                    line.length > 0
+                    && !line.startsWith('CAUSES')
+                    && !line.startsWith('RECOMMENDATIONS')
+                    && !/^CONFIDENCE:?\s*(low|medium|high)/i.test(line)
+                );
         };
 
         return {
             traceId,
-            summary: summaryMatch?.[1]?.trim() || 'Unable to generate summary',
+            summary: summary || 'Unable to generate summary',
             possibleCauses: extractBullets(causesMatch?.[1]),
             recommendations: extractBullets(recsMatch?.[1]),
             confidence: (confMatch?.[1]?.toLowerCase() as 'low' | 'medium' | 'high') || 'low',

@@ -352,5 +352,139 @@
     "completion": "SUMMARY: The pg-pool.connect operation in kx-exchange experienced a significant deviation from the expected duration, likely caused by an overload of connections to the PostgreSQL database.\n\nCAUSES:\n- Increased request rate (0.1 req/s) may be exceeding the capacity of the underlying PostgreSQL connection pool.\n- High CPU usage (0.5%) could indicate multiple concurrent requests are being processed simultaneously, further exacerbating the issue.\n- P99 latency of 8140ms suggests that the overall system is experiencing delays in handling requests.\n\nRECOMMENDATIONS:\n1. **Optimize Database Connection Pooling**: Review and adjust PostgreSQL connection pool parameters to ensure they are not exceeding the available resources. Consider using a more efficient connection pooling strategy or adjusting the idle timeout.\n2. **Reduce Request Rate**: Implement rate limiting on incoming connections to prevent excessive load on the database and system. This can be achieved through API gateways, routers, or by implementing rate limits at the application level.\n3. **Improve CPU Utilization Management**: Monitor and manage CPU usage more closely to ensure it does not exceed acceptable levels. This may involve optimizing code, adding more processing power, or using techniques like task pooling.\n\nCONFIDENCE: Low",
     "rating": "bad",
     "correction": "low cpu, not a factor"
+  },
+  {
+    "id": "train_1770907922276_jsba1o",
+    "timestamp": "2026-02-12T14:52:02.276Z",
+    "anomaly": {
+      "id": "21a33dce36a5c8fc0404dca6641585e3-2d916b535f833818",
+      "traceId": "21a33dce36a5c8fc0404dca6641585e3",
+      "service": "kx-exchange",
+      "operation": "pg.query:INSERT crypto_exchange",
+      "duration": 180.12,
+      "expectedMean": 2.4,
+      "deviation": 112.48,
+      "severity": 1,
+      "severityName": "Critical",
+      "timestamp": "2026-02-12T14:50:35.105Z"
+    },
+    "prompt": "Analyze anomaly: kx-exchange:pg.query:INSERT crypto_exchange",
+    "completion": "Analysis failed: Ollama returned 404\n\nCauses: The kx-exchange service took 180.12ms instead of expected 2.4ms, This could indicate resource contention, network latency, or downstream service issues\n\nRecommendations: Start Ollama: docker compose up -d ollama, Pull model: docker exec -it krystaline-ollama-1 ollama pull llama3.2:1b, Check the service logs for errors around the timestamp",
+    "rating": "good"
+  },
+  {
+    "id": "train_1770907938535_9ne0xx",
+    "timestamp": "2026-02-12T14:52:18.535Z",
+    "anomaly": {
+      "id": "7a349b458a9dfeeecddb687a320898ea-c5210fda7d7a7a80",
+      "traceId": "7a349b458a9dfeeecddb687a320898ea",
+      "service": "kx-exchange",
+      "operation": "pg.query:INSERT crypto_exchange",
+      "duration": 262.35,
+      "expectedMean": 2.4,
+      "deviation": 164.53,
+      "severity": 1,
+      "severityName": "Critical",
+      "timestamp": "2026-02-12T14:50:33.947Z"
+    },
+    "prompt": "Analyze anomaly: kx-exchange:pg.query:INSERT crypto_exchange",
+    "completion": "Analysis failed: Ollama returned 404\n\nCauses: The kx-exchange service took 262.35ms instead of expected 2.4ms, This could indicate resource contention, network latency, or downstream service issues\n\nRecommendations: Start Ollama: docker compose up -d ollama, Pull model: docker exec -it krystaline-ollama-1 ollama pull llama3.2:1b, Check the service logs for errors around the timestamp",
+    "rating": "good"
+  },
+  {
+    "id": "train_1770907967674_ittc0i",
+    "timestamp": "2026-02-12T14:52:47.674Z",
+    "anomaly": {
+      "id": "cc8626ff7f460b3d8a379a73a94070b8-360411699a5b3ae0",
+      "traceId": "cc8626ff7f460b3d8a379a73a94070b8",
+      "service": "kx-exchange",
+      "operation": "pg.query:SELECT crypto_exchange",
+      "duration": 672.78,
+      "expectedMean": 3.53,
+      "deviation": 158.21,
+      "severity": 1,
+      "severityName": "Critical",
+      "timestamp": "2026-02-12T14:51:43.825Z"
+    },
+    "prompt": "Analyze anomaly: kx-exchange:pg.query:SELECT crypto_exchange",
+    "completion": "Analysis failed: Ollama returned 404\n\nCauses: The kx-exchange service took 672.78ms instead of expected 3.53ms, This could indicate resource contention, network latency, or downstream service issues\n\nRecommendations: Start Ollama: docker compose up -d ollama, Pull model: docker exec -it krystaline-ollama-1 ollama pull llama3.2:1b, Check the service logs for errors around the timestamp",
+    "rating": "good"
+  },
+  {
+    "id": "train_1771243476785_f8tsvl",
+    "timestamp": "2026-02-16T12:04:36.785Z",
+    "anomaly": {
+      "id": "d00cf4d89e361da1c52e5116d840ad06-d44b0758e75dbe65",
+      "traceId": "d00cf4d89e361da1c52e5116d840ad06",
+      "service": "kx-exchange",
+      "operation": "pg-pool.connect",
+      "duration": 455.84,
+      "expectedMean": 1.29,
+      "deviation": 20.78,
+      "severity": 1,
+      "severityName": "Critical",
+      "timestamp": "2026-02-16T12:02:45.383Z"
+    },
+    "prompt": "You are an expert in distributed systems and observability. Analyze this performance anomaly:\n\n## Anomaly Details\n- Service: kx-exchange\n- Operation: pg-pool.connect\n- Duration: 455.84ms (expected: 1.29ms ± 21.87ms)\n- Deviation: 20.78σ (standard deviations from mean)\n- Severity: SEV1 (Critical)\n- Timestamp: Mon Feb 16 2026 13:02:45 GMT+0100 (Central European Standard Time)\n\n## Span Attributes\n{\n  \"db.connection_string\": \"postgresql://localhost:5433/crypto_exchange\",\n  \"db.name\": \"crypto_exchange\",\n  \"db.postgresql.idle.timeout.millis\": 30000,\n  \"db.system\": \"postgresql\",\n  \"db.user\": \"exchange\",\n  \"net.peer.name\": \"localhost\",\n  \"net.peer.port\": 5433,\n  \"otel.scope.name\": \"@opentelemetry/instrumentation-pg\",\n  \"otel.scope.version\": \"0.54.1\",\n  \"span.kind\": \"client\"\n}\n\n## Correlated System Metrics (at time of anomaly)\n- CPU Usage: 0.8%\n- Memory: 130MB\n- Request Rate: 0.3 req/s\n- Error Rate: 2.9%\n- P99 Latency: 7875ms\n- Active Connections: 0\n\n## Auto-Detected Issues\n- 📊 Notable error rate (2.9%)\n\n## Trace Context\nThe full trace contains 10 spans:\n- kx-exchange: pg-pool.connect (0.52ms)\n- kx-exchange: pg.query:SELECT crypto_exchange (29.39ms)\n- kx-exchange: pg-pool.connect (455.84ms)\n- kx-exchange: pg.query:INSERT crypto_exchange (8.88ms)\n- kx-exchange: pg-pool.connect (0.24ms)\n- kx-exchange: dns.lookup (9.09ms)\n- kx-exchange: pg.connect (453.33ms)\n- kx-exchange: pg.query:INSERT crypto_exchange (7.29ms)\n- kx-exchange: tcp.connect (5.82ms)\n- kx-exchange: POST (1222.30ms)\n\n\nBased on the trace data AND correlated metrics, provide:\n1. A brief summary (1-2 sentences) of what likely caused this anomaly\n2. 2-3 possible root causes (consider resource utilization if metrics show issues)\n3. 2-3 actionable recommendations\n\nFormat your response as:\nSUMMARY: [your summary]\nCAUSES:\n- [cause 1]\n- [cause 2]\nRECOMMENDATIONS:\n- [recommendation 1]\n- [recommendation 2]\nCONFIDENCE: [low/medium/high]",
+    "completion": "SUMMARY: The kx-exchange service experienced a significant performance anomaly, characterized by an extremely high connection attempt rate (20.78σ deviation from the mean), coupled with a notable error rate of 2.9%. This suggests that the service was likely overwhelmed by concurrent requests, potentially due to increased traffic or resource contention.\n\nCAUSES:\n- **Overwhelming Requests**: The high request rate and error rate may indicate that the database connection pool was unable to handle the incoming requests efficiently, leading to a significant increase in connection attempts.\n- **Resource Contention**: Increased CPU usage (0.8%) and memory utilization (130MB) suggest that the system may have experienced resource contention, such as increased demand for memory or I/O operations, which can lead to performance degradation.\n- **Database Connection Pool Limitation**: The database connection pool's idle timeout might have been exceeded, causing the service to attempt connections from multiple clients without resolving them. This could be due to a misconfigured pool setting, insufficient resource allocation, or an issue with the underlying database configuration.\n\nRECOMMENDATIONS:\n- **Optimize Database Configuration**: Review and adjust database settings to ensure that the connection pool is configured correctly, and sufficient resources are allocated for concurrent requests.\n- **Implement Connection Pool Limitation**: Implement a connection pool limitation (e.g., max connections) to prevent excessive connection attempts from any single client. This can help mitigate resource contention and improve overall system performance.\n- **Monitor and Analyze Metrics**: Regularly monitor and analyze the correlated system metrics, such as CPU usage, memory utilization, and request rate, to identify potential bottlenecks or areas for optimization.",
+    "rating": "bad",
+    "correction": "there was no Resource Contention"
+  },
+  {
+    "id": "train_1771247248295_6vzb8j",
+    "timestamp": "2026-02-16T13:07:28.295Z",
+    "anomaly": {
+      "id": "4573ea0a8034f07ea4d288c36254aa8d-f91e6c3caa145f9d",
+      "traceId": "4573ea0a8034f07ea4d288c36254aa8d",
+      "service": "kx-exchange",
+      "operation": "pg-pool.connect",
+      "duration": 282.77,
+      "expectedMean": 1.01,
+      "deviation": 17.39,
+      "severity": 2,
+      "severityName": "Major",
+      "timestamp": "2026-02-16T13:06:09.443Z"
+    },
+    "prompt": "You are an expert in distributed systems and observability. Analyze this performance anomaly:\n\n## Anomaly Details\n- Service: kx-exchange\n- Operation: pg-pool.connect\n- Duration: 282.77ms (expected: 1.01ms ± 16.2ms)\n- Deviation: 17.39σ (standard deviations from mean)\n- Severity: SEV2 (Major)\n- Timestamp: Mon Feb 16 2026 14:06:09 GMT+0100 (Central European Standard Time)\n\n## Span Attributes\n{\n  \"db.connection_string\": \"postgresql://localhost:5433/crypto_exchange\",\n  \"db.name\": \"crypto_exchange\",\n  \"db.postgresql.idle.timeout.millis\": 30000,\n  \"db.system\": \"postgresql\",\n  \"db.user\": \"exchange\",\n  \"net.peer.name\": \"localhost\",\n  \"net.peer.port\": 5433,\n  \"otel.scope.name\": \"@opentelemetry/instrumentation-pg\",\n  \"otel.scope.version\": \"0.54.1\",\n  \"span.kind\": \"client\"\n}\n\n## Correlated System Metrics (at time of anomaly)\n- CPU Usage: 0.5%\n- Memory: 99MB\n- Request Rate: 0.9 req/s\n- Error Rate: 28.2% ⚠️ HIGH\n- P99 Latency: 2358ms\n- Active Connections: 4\n\n## Auto-Detected Issues\n- 🔥 Critical error rate (28.2%) - service degradation\n\n## Trace Context\nThe full trace contains 11 spans:\n- kx-exchange: pg.query:INSERT crypto_exchange (2.17ms)\n- kx-exchange: pg-pool.connect (0.03ms)\n- kx-exchange: pg-pool.connect (0.05ms)\n- kx-exchange: pg.query:SELECT crypto_exchange (1.33ms)\n- kx-exchange: dns.lookup (2.06ms)\n- kx-exchange: pg.connect (282.09ms)\n- kx-exchange: pg.query:INSERT crypto_exchange (1.73ms)\n- kx-exchange: tcp.connect (0.56ms)\n- kx-exchange: POST (746.48ms)\n- kx-exchange: tcp.connect (265.50ms)\n... and 1 more spans\n\nBased on the trace data AND correlated metrics, provide:\n1. A brief summary (1-2 sentences) of what likely caused this anomaly\n2. 2-3 possible root causes (consider resource utilization if metrics show issues)\n3. 2-3 actionable recommendations\n\nFormat your response as:\nSUMMARY: [your summary]\nCAUSES:\n- [cause 1]\n- [cause 2]\nRECOMMENDATIONS:\n- [recommendation 1]\n- [recommendation 2]\nCONFIDENCE: [low/medium/high]",
+    "completion": "SUMMARY: The kx-exchange service experienced an unexpected increase in request rate of 0.9 req/s, causing a significant spike in error rate (28.2%) to 0.28% high, leading to critical error rate (28.2%). This anomaly is likely caused by excessive resource utilization, particularly CPU usage and memory allocation issues.\n\nCAUSES:\n- Excessive CPU usage: The kx-exchange service experienced high CPU usage during the operation, which may be due to an overload of requests or inadequate system resources.\n- Memory leaks: There might be memory leaks within the PostgreSQL connection pool, causing the service to consume excessive memory and leading to the observed error rate increase.\n- Network issues: Potential network problems, such as DNS resolution delays or TCP connection overheads, could have contributed to the increased request rate.\n\nRECOMMENDATIONS:\n- Monitor CPU usage and system resources in real-time to identify potential bottlenecks and adjust resource allocation accordingly.\n- Implement memory leak detection and mitigation strategies within the PostgreSQL connection pool to prevent excessive memory consumption.\n- Optimize network configuration and DNS resolution settings to minimize delays and improve overall system performance.",
+    "rating": "good"
+  },
+  {
+    "id": "train_1771432383611_c7axxv",
+    "timestamp": "2026-02-18T16:33:03.611Z",
+    "anomaly": {
+      "id": "af9d1a3db50af25b0c914fa050d27b72-2ad06caff8b26a6d",
+      "traceId": "af9d1a3db50af25b0c914fa050d27b72",
+      "service": "kx-exchange",
+      "operation": "pg-pool.connect",
+      "duration": 266.3,
+      "expectedMean": 2.63,
+      "deviation": 9.95,
+      "severity": 4,
+      "severityName": "Minor",
+      "timestamp": "2026-02-18T16:21:48.647Z"
+    },
+    "prompt": "You are an expert in distributed systems and observability. Analyze this performance anomaly:\n\n## Anomaly Details\n- Service: kx-exchange\n- Operation: pg-pool.connect\n- Duration: 266.3ms (expected: 2.63ms ± 26.51ms)\n- Deviation: 9.95σ (standard deviations from mean)\n- Severity: SEV4 (Minor)\n- Timestamp: Wed Feb 18 2026 17:21:48 GMT+0100 (Central European Standard Time)\n\n## Span Attributes\n{\n  \"db.connection_string\": \"postgresql://localhost:5433/crypto_exchange\",\n  \"db.name\": \"crypto_exchange\",\n  \"db.postgresql.idle.timeout.millis\": 30000,\n  \"db.system\": \"postgresql\",\n  \"db.user\": \"exchange\",\n  \"net.peer.name\": \"localhost\",\n  \"net.peer.port\": 5433,\n  \"otel.scope.name\": \"@opentelemetry/instrumentation-pg\",\n  \"otel.scope.version\": \"0.54.1\",\n  \"span.kind\": \"client\"\n}\n\n## Correlated System Metrics (at time of anomaly)\n- CPU Usage: 0.5%\n- Memory: 22MB\n- Request Rate: 0.0 req/s\n- Error Rate: 0.0%\n- P99 Latency: 8644ms\n- Active Connections: 0\n\n## Trace Context\nThe full trace contains 15 spans:\n- kx-exchange: pg.connect (265.56ms)\n- kx-exchange: pg.query:SELECT crypto_exchange (16.95ms)\n- kx-wallet: HTTP GET (312.00ms)\n- api-gateway: kong.dns (0.03ms)\n- api-gateway: kong.header_filter.plugin.opentelemetry (0.01ms)\n- kx-exchange: GET (285.90ms)\n- kx-exchange: dns.lookup (4.36ms)\n- kx-exchange: tcp.connect (257.40ms)\n- api-gateway: kong.router (0.03ms)\n- api-gateway: kong.header_filter.plugin.cors (0.24ms)\n... and 5 more spans\n\nBased on the trace data AND correlated metrics, provide:\n1. A brief summary (1-2 sentences) of what likely caused this anomaly\n2. 2-3 possible root causes (consider resource utilization if metrics show issues)\n3. 2-3 actionable recommendations\n\nFormat your response as:\nSUMMARY: [your summary]\nCAUSES:\n- [cause 1]\n- [cause 2]\nRECOMMENDATIONS:\n- [recommendation 1]\n- [recommendation 2]\nCONFIDENCE: [low/medium/high]",
+    "completion": "SUMMARIES\nAn application connection timeout of 26.3ms is minor and may not warrant investigation, but persistent elevated latency (P99=8644ms) suggests systemic database pressure that should be monitored proactively.\n\nCAUSES:\n- Elevated P99 latency indicates long-running queries or table contention among concurrent transactions\n- Low request rate ($0/s) means no traffic to make warmup requests, confirming idle connection state\n- TCP connect span shows network-level resolution delay (dns lookup), not application-specific behavior\n\nRECOMMENDATIONS:\n- Implement health check-driven maintenance: stop serving products when dbidleinactivity > Xms (where X is a meaningful threshold)\n- Add query count or utilization metrics to monitoring instead of relying on idle timeout flags\n- Consider connection pooling with resource-based timeouts rather than fixed idle intervals\n\nCONFIDENCE medium",
+    "rating": "good"
+  },
+  {
+    "id": "train_1771433114851_s0j4pb",
+    "timestamp": "2026-02-18T16:45:14.851Z",
+    "anomaly": {
+      "id": "529c4851ee1ad7de442477a183e96db1-538558fb04a6eca7",
+      "traceId": "529c4851ee1ad7de442477a183e96db1",
+      "service": "kx-exchange",
+      "operation": "pg-pool.connect",
+      "duration": 297.18,
+      "expectedMean": 0.55,
+      "deviation": 25.57,
+      "severity": 1,
+      "severityName": "Critical",
+      "timestamp": "2026-02-18T16:41:15.914Z"
+    },
+    "prompt": "You are an expert in distributed systems and observability. Analyze this performance anomaly:\n\n## Anomaly Details\n- Service: kx-exchange\n- Operation: pg-pool.connect\n- Duration: 297.18ms (expected: 0.55ms ± 11.6ms)\n- Deviation: 25.57σ (standard deviations from mean)\n- Severity: SEV1 (Critical)\n- Timestamp: Wed Feb 18 2026 17:41:15 GMT+0100 (Central European Standard Time)\n\n## Span Attributes\n{\n  \"db.connection_string\": \"postgresql://localhost:5433/crypto_exchange\",\n  \"db.name\": \"crypto_exchange\",\n  \"db.postgresql.idle.timeout.millis\": 30000,\n  \"db.system\": \"postgresql\",\n  \"db.user\": \"exchange\",\n  \"net.peer.name\": \"localhost\",\n  \"net.peer.port\": 5433,\n  \"otel.scope.name\": \"@opentelemetry/instrumentation-pg\",\n  \"otel.scope.version\": \"0.54.1\",\n  \"span.kind\": \"client\"\n}\n\n## Correlated System Metrics (at time of anomaly)\n- CPU Usage: 1.1%\n- Memory: 123MB\n- Request Rate: 0.2 req/s\n- Error Rate: 0.0%\n- P99 Latency: 988ms\n- Active Connections: 0\n\n## Trace Context\nThe full trace contains 11 spans:\n- kx-exchange: pg.query:SELECT crypto_exchange (5.79ms)\n- kx-wallet: HTTP GET (325.00ms)\n- kx-exchange: pg-pool.connect (0.35ms)\n- kx-exchange: pg.query:SELECT crypto_exchange (14.82ms)\n- kx-exchange: GET (314.50ms)\n- kx-exchange: pg-pool.connect (1.26ms)\n- kx-exchange: dns.lookup (2.96ms)\n- kx-exchange: pg.query:SELECT crypto_exchange (9.76ms)\n- kx-exchange: tcp.connect (268.19ms)\n- kx-exchange: pg.connect (294.11ms)\n... and 1 more spans\n\nBased on the trace data AND correlated metrics, provide:\n1. A brief summary (1-2 sentences) of what likely caused this anomaly\n2. 2-3 possible root causes (consider resource utilization if metrics show issues)\n3. 2-3 actionable recommendations\n\nFormat your response as:\nSUMMARY: [your summary]\nCAUSES:\n- [cause 1]\n- [cause 2]\nRECOMMENDATIONS:\n- [recommendation 1]\n- [recommendation 2]\nCONFIDENCE: [low/medium/high]",
+    "completion": "SUMMARY: The pg-pool.connect operation took 298ms, elevated from the expected 0.55ms, likely due to a connection pool exhaustion event requiring a new TCP connect to PostgreSQL.\n\nCAUSES:\n- Connection pooling was empty, forcing an initial network round-trip to PostgreSQL\n- Elevated CPU (1.1%) suggests active database processing contributing to latency\n- Idle timeout of 30s may have expired an unused connection during inactivity\n\nRECOMMENDATIONS:\n- Increase minimum pool size or reduce idletimeout if connections are being wasted\n- Add TCP connect timing out before theidle.timeout.expiration -- adjust this value as needed based on your application's traffic patterns\n- Monitor pool utilization metrics (average req/s vs. current) to identify trend outliers that warrant attention\n\nCONFIDENCE: high",
+    "rating": "good"
   }
 ]

@@ -125,8 +125,9 @@ app.use(corsMiddleware);
   // Register trade routes
   app.use('/api/v1/trade', tradeRoutes);
 
-  // Register monitor routes
+  // Register monitor routes (versioned + backward-compatible alias)
   app.use('/api/v1/monitor', monitorRoutes);
+  app.use('/api/monitor', monitorRoutes);
 
   // Register public transparency routes (unauthenticated)
   app.use('/api/v1/public', publicRoutes);

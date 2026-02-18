@@ -45,3 +45,10 @@ docs/images/
 docs/api/
 docs/*.zip
 docs-bundle.zip
+
+# Model training artifacts (large binary files)
+lora-anomaly-analyzer/
+last_run_prepared/
+*.gguf
+*.safetensors
+*.bin
