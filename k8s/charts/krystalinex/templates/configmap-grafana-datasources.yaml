@@ -25,6 +25,13 @@ data:
         access: proxy
         url: http://{{ include "krystalinex.fullname" . }}-jaeger:16686/jaeger
         isDefault: false
+        jsonData:
+          tracesToLogs:
+            datasourceUid: loki
+            filterByTraceID: true
+            spanStartTimeShift: "-1h"
+            spanEndTimeShift: "1h"
+            lokiSearch: true
       {{- if .Values.loki }}
       {{- if .Values.loki.enabled }}
       - name: Loki
@@ -36,7 +43,11 @@ data:
         jsonData:
           derivedFields:
             - datasourceUid: jaeger
-              matcherRegex: "traceId=(\\w+)"
+              matcherRegex: '"traceId"\s*:\s*"(\w+)"'
+              name: TraceID
+              url: "$${__value.raw}"
+            - datasourceUid: jaeger
+              matcherRegex: 'traceId=(\w+)'
               name: TraceID
               url: "$${__value.raw}"
       {{- end }}

@@ -1,0 +1,68 @@
+{{- if .Values.maildev.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-maildev
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: maildev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "krystalinex.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: maildev
+  template:
+    metadata:
+      labels:
+        {{- include "krystalinex.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: maildev
+    spec:
+      containers:
+        - name: maildev
+          image: "{{ .Values.maildev.image.repository }}:{{ .Values.maildev.image.tag }}"
+          ports:
+            - name: web
+              containerPort: 1080
+            - name: smtp
+              containerPort: 1025
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 1080
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 1080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-maildev
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: maildev
+spec:
+  type: {{ .Values.maildev.service.type | default "ClusterIP" }}
+  ports:
+    - port: {{ .Values.maildev.service.ports.web }}
+      targetPort: web
+      name: web
+    - port: {{ .Values.maildev.service.ports.smtp }}
+      targetPort: smtp
+      name: smtp
+  selector:
+    {{- include "krystalinex.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: maildev
+{{- end }}
