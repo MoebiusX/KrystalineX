@@ -84,6 +84,12 @@ spec:
               value: "http://{{ include "krystalinex.fullname" . }}-prometheus:9090/prometheus"
             - name: OLLAMA_MODEL
               value: "XavierThibaudon/anomaly-analyzer"
+            {{- if .Values.maildev.enabled }}
+            - name: SMTP_HOST
+              value: "{{ include "krystalinex.fullname" . }}-maildev"
+            - name: SMTP_PORT
+              value: "1025"
+            {{- end }}
           {{- with .Values.server.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

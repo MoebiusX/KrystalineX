@@ -45,8 +45,8 @@ rabbitmq:
 
 server:
   image:
-    repository: localhost:5000/krystalinex-server
-    tag: "v2.1.1"
+    repository: moebiusx/krystalinex-server
+    tag: "v2.2.1"
     pullPolicy: Always
   resources:
     limits:

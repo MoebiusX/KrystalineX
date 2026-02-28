@@ -62,6 +62,23 @@ spec:
           emptyDir: {}
           {{- end }}
 ---
+{{- if .Values.goalert.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-goalert-db
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: goalert-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.goalert.persistence.storageClass | default "local-storage" }}
+  resources:
+    requests:
+      storage: {{ .Values.goalert.persistence.size | default "5Gi" }}
+{{- end }}
+---
 apiVersion: v1
 kind: Service
 metadata:

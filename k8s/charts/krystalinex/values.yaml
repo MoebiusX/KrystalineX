@@ -180,11 +180,11 @@ jaeger:
       otlpHttp: 4318
   resources:
     limits:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 1000m
+      memory: 2Gi
     requests:
       cpu: 100m
-      memory: 512Mi
+      memory: 1Gi
 
 otelCollector:
   enabled: true
@@ -336,6 +336,12 @@ maildev:
     ports:
       web: 1080
       smtp: 1025
+
+kubeStateMetrics:
+  enabled: true
+  image:
+    repository: registry.k8s.io/kube-state-metrics/kube-state-metrics
+    tag: v2.13.0
 
 # =============================================================================
 # NETWORK & SECURITY

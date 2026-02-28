@@ -25,6 +25,7 @@ const logger = createLogger('security');
 export const generalRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 300, // 300 requests per minute
+  keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many requests',
     message: 'Please try again in a minute',
@@ -57,6 +58,7 @@ export const generalRateLimiter = rateLimit({
 export const authRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 60, // 60 requests per minute
+  keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many authentication attempts',
     message: 'Please try again in a minute',
@@ -89,6 +91,7 @@ export const authRateLimiter = rateLimit({
 export const sensitiveRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 15, // 15 requests per minute
+  keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many attempts',
     message: 'Please wait before trying again',
