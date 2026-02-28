@@ -4,7 +4,6 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
-package-lock.json
 
 # Environment files (may contain secrets)
 .env
