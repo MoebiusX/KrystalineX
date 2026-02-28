@@ -67,6 +67,14 @@ data:
           - targets: ['{{ include "krystalinex.fullname" . }}-postgres-exporter:9187']
         scrape_interval: 15s
 
+      # Kube State Metrics (K8s object metrics - pods, deployments, nodes)
+      {{- if .Values.kubeStateMetrics.enabled }}
+      - job_name: 'kube-state-metrics'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-kube-state-metrics:8080']
+        scrape_interval: 15s
+      {{- end }}
+
       # ============================================
       # AI / ML SERVICES
       # ============================================
