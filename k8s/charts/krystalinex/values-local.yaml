@@ -170,27 +170,34 @@ ingress:
         - path: /ws
           pathType: Prefix
           service: server
-        - path: /grafana
-          pathType: Prefix
-          service: grafana
-        - path: /jaeger
-          pathType: Prefix
-          service: jaeger
-        - path: /prometheus
-          pathType: Prefix
-          service: prometheus
-        - path: /alertmanager
-          pathType: Prefix
-          service: alertmanager
-        - path: /goalert
-          pathType: Prefix
-          service: goalert
+  # Observability paths — protected by nginx basic auth
+  protectedPaths:
+    - path: /grafana
+      pathType: Prefix
+      service: grafana
+    - path: /jaeger
+      pathType: Prefix
+      service: jaeger
+    - path: /prometheus
+      pathType: Prefix
+      service: prometheus
+    - path: /alertmanager
+      pathType: Prefix
+      service: alertmanager
+    - path: /goalert
+      pathType: Prefix
+      service: goalert
   tls:
     - secretName: krystalinex-tls
       hosts:
         - www.krystaline.io
 
+# Basic auth for observability endpoints (credentials in values-secrets.yaml)
+basicAuth:
+  enabled: true
+
 prometheus:
+  replicaCount: 2
   persistence:
     enabled: true
     size: 10Gi

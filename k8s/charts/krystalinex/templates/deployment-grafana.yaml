@@ -62,6 +62,9 @@ spec:
             - name: dashboard-json
               mountPath: /etc/grafana/provisioning/dashboards/unified-observability.json
               subPath: unified-observability.json
+            - name: k8s-dashboard-json
+              mountPath: /etc/grafana/provisioning/dashboards/k8s-cluster.json
+              subPath: k8s-cluster.json
           {{- if .Values.grafana.persistence.enabled }}
             - name: grafana-data
               mountPath: /var/lib/grafana
@@ -96,6 +99,12 @@ spec:
             items:
               - key: unified-observability.json
                 path: unified-observability.json
+        - name: k8s-dashboard-json
+          configMap:
+            name: {{ include "krystalinex.fullname" . }}-grafana-dashboards
+            items:
+              - key: k8s-cluster.json
+                path: k8s-cluster.json
       {{- if .Values.grafana.persistence.enabled }}
         - name: grafana-data
           persistentVolumeClaim:
