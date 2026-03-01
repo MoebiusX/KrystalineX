@@ -1,15 +1,14 @@
 {{- if .Values.prometheus.enabled }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "krystalinex.fullname" . }}-prometheus
   labels:
     {{- include "krystalinex.labels" . | nindent 4 }}
     app.kubernetes.io/component: prometheus
 spec:
-  replicas: 1
-  strategy:
-    type: Recreate
+  serviceName: {{ include "krystalinex.fullname" . }}-prometheus
+  replicas: {{ .Values.prometheus.replicaCount | default 1 }}
   selector:
     matchLabels:
       {{- include "krystalinex.selectorLabels" . | nindent 6 }}
@@ -20,6 +19,16 @@ spec:
         {{- include "krystalinex.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: prometheus
     spec:
+      {{- if gt (int (.Values.prometheus.replicaCount | default 1)) 1 }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "krystalinex.selectorLabels" . | nindent 18 }}
+                  app.kubernetes.io/component: prometheus
+              topologyKey: kubernetes.io/hostname
+      {{- end }}
       containers:
         - name: prometheus
           image: "{{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}"
@@ -27,7 +36,6 @@ spec:
             - '--config.file=/etc/prometheus/prometheus.yml'
             - '--storage.tsdb.path=/prometheus'
             - '--storage.tsdb.no-lockfile'
-            - '--web.enable-lifecycle'
             - '--web.external-url=/prometheus/'
           ports:
             - name: http
@@ -55,13 +63,22 @@ spec:
         - name: config
           configMap:
             name: {{ include "krystalinex.fullname" . }}-prometheus-config
+        {{- if not .Values.prometheus.persistence.enabled }}
         - name: data
-          {{- if .Values.prometheus.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "krystalinex.fullname" . }}-prometheus
-          {{- else }}
           emptyDir: {}
-          {{- end }}
+        {{- end }}
+  {{- if .Values.prometheus.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: local-storage
+        resources:
+          requests:
+            storage: {{ .Values.prometheus.persistence.size }}
+  {{- end }}
 ---
 apiVersion: v1
 kind: Service

@@ -90,6 +90,33 @@ spec:
               values:
                 - kube
 ---
+# PV: Prometheus replica 2 (10Gi) — on worker1 for redundancy
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-prometheus-pv-2
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  capacity:
+    storage: {{ .Values.prometheus.persistence.size }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/krystalinex/prometheus
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - worker1
+---
 # PV: Grafana (5Gi)
 apiVersion: v1
 kind: PersistentVolume
