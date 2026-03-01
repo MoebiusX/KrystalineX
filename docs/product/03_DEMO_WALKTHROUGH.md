@@ -2,32 +2,32 @@
 
 > **Purpose:** Step-by-step guide to demonstrate "Proof of Observability™"  
 > **Duration:** 12-15 minutes  
-> **Updated:** 2026-01-28
+> **Updated:** 2026-03-01  
+> **Environment:** Kubernetes (Helm) at `www.krystaline.io`
 
 ---
 
 ## Pre-Demo Checklist
 
-### Start Infrastructure
-```powershell
-# Start all containers
-docker compose up -d
-
-# Wait 60 seconds, then start app
-npm run dev
-```
-
 ### Verify Services Running
-| Service | URL | What to Check |
-|---------|-----|---------------|
-| App | http://localhost:5000 | Landing page loads |
-| Jaeger | http://localhost:16686 | UI accessible |
-| MailDev | http://localhost:1080 | Inbox visible |
-| Kong | http://localhost:8001 | Admin API responds |
 
-### Pre-Seed Data (Optional)
+> **Auth:** Observability endpoints require nginx basic auth — see `values-secrets.yaml` for credentials
+
+| Service | URL | Auth Required |
+|---------|-----|---------------|
+| **App** | https://www.krystaline.io | No |
+| **Grafana** | https://www.krystaline.io/grafana/ | Yes (nginx + Grafana) |
+| **Jaeger** | https://www.krystaline.io/jaeger/ | Yes |
+| **Prometheus** | https://www.krystaline.io/prometheus/ | Yes |
+| **Alertmanager** | https://www.krystaline.io/alertmanager/ | Yes |
+| **GoAlert** | https://www.krystaline.io/goalert/ | Yes |
+
+### Pre-Demo Warm-up
 ```powershell
-npm run db:seed  # Creates demo users with balances
+# Recalculate baselines to ensure fresh K8s metrics
+curl -X POST https://www.krystaline.io/api/v1/monitor/recalculate
+
+# Execute 5-10 trades to warm up the trace pipeline
 ```
 
 ---
@@ -36,7 +36,7 @@ npm run db:seed  # Creates demo users with balances
 
 ### Act 1: The Promise (2 min)
 
-**Navigate to:** `http://localhost:5000` (Landing Page)
+**Navigate to:** `https://www.krystaline.io` (Landing Page)
 
 **What You'll See:**
 - "Proof of Observability™" headline
@@ -63,7 +63,7 @@ npm run db:seed  # Creates demo users with balances
 - Submit → "Check your email"
 
 **Step 2: Verify Email**
-- Open new tab: `http://localhost:1080` (MailDev)
+- Open new tab: MailDev (if exposed) or check email service
 - Find verification email
 - Copy 6-digit code
 
@@ -132,7 +132,7 @@ Client → Kong Gateway → Express API → RabbitMQ → Order Matcher → Postg
 Opens Jaeger directly to this trade's trace
 
 **Option B: Open Jaeger Manually**
-- Navigate to: `http://localhost:16686`
+- Navigate to: `https://www.krystaline.io/jaeger/` (requires nginx basic auth)\r
 - Service: `krystalinex` or `kong`
 - Click "Find Traces"
 - Select most recent trace
@@ -252,13 +252,11 @@ These exist but shouldn't derail the demo:
 
 To start fresh between demos:
 ```powershell
-# Reset database
-docker compose down -v
-docker compose up -d
+# Recalculate baselines for fresh metrics
+curl -X POST https://www.krystaline.io/api/v1/monitor/recalculate
 
-# Wait 60 seconds
-npm run dev
-npm run db:seed  # Optional: seed demo data
+# Full cluster redeploy (if needed)
+helm upgrade kx k8s/charts/krystalinex -f k8s/charts/krystalinex/values-local.yaml -f k8s/charts/krystalinex/values-secrets.yaml -n krystalinex
 ```
 
 ---
@@ -285,4 +283,5 @@ node scripts/enable-kong-cors.js
 
 ---
 
-*This walkthrough demonstrates real functionality, not mockups. Practice the flow before investor meetings.*
+*This walkthrough demonstrates real functionality, not mockups. Practice the flow before investor meetings.*  
+*Environment: Kubernetes cluster at `www.krystaline.io` — Helm revision 72+ — Updated March 2026*
