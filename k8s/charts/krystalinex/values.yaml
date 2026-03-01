@@ -369,6 +369,17 @@ ingress:
   #  - secretName: krystalinex-tls
   #    hosts:
   #      - krystalinex.local
+  # Protected paths (served via a separate ingress with basic auth)
+  protectedPaths: []
+
+# =============================================================================
+# BASIC AUTH (for protecting observability endpoints)
+# =============================================================================
+
+basicAuth:
+  enabled: false
+  username: ""
+  password: ""
 
 # =============================================================================
 # SECRETS (Reference only - actual values in sealed secrets or Vault)

@@ -476,6 +476,61 @@ data:
               description: "{{ "{{" }} $value {{ "}}" }} high/critical security events in 10 minutes"
 
       # ============================================
+      # TRAFFIC ANOMALY ALERTS
+      # ============================================
+      - name: krystalinex.traffic
+        rules:
+          - alert: TrafficSpike
+            expr: |
+              sum(rate(http_requests_total[5m]))
+              > 5 * sum(rate(http_requests_total[1h] offset 1h))
+              and sum(rate(http_requests_total[1h] offset 1h)) > 0
+            for: 3m
+            labels:
+              severity: warning
+              service: traffic
+            annotations:
+              summary: "Traffic spike detected"
+              description: "Current request rate is {{ "{{" }} $value | humanize {{ "}}" }} req/s — more than 5x the previous hour's baseline"
+
+          - alert: SustainedHighTraffic
+            expr: |
+              sum(rate(http_requests_total[15m])) > 50
+            for: 15m
+            labels:
+              severity: warning
+              service: traffic
+            annotations:
+              summary: "Sustained high traffic volume"
+              description: "Request rate has been {{ "{{" }} $value | humanize {{ "}}" }} req/s for 15+ minutes"
+
+          - alert: TrafficFlood
+            expr: |
+              sum(rate(http_requests_total[2m]))
+              > 10 * sum(rate(http_requests_total[1h] offset 1h))
+              and sum(rate(http_requests_total[1h] offset 1h)) > 0
+            for: 1m
+            labels:
+              severity: critical
+              service: traffic
+            annotations:
+              summary: "Possible DDoS or traffic flood"
+              description: "Current rate is {{ "{{" }} $value | humanize {{ "}}" }} req/s — 10x the previous baseline. Possible attack in progress."
+
+          - alert: UnusualErrorSpike
+            expr: |
+              sum(rate(http_requests_total{status=~"4.."}[5m]))
+              > 5 * sum(rate(http_requests_total{status=~"4.."}[1h] offset 1h))
+              and sum(rate(http_requests_total{status=~"4.."}[1h] offset 1h)) > 0
+            for: 3m
+            labels:
+              severity: warning
+              service: traffic
+            annotations:
+              summary: "Unusual spike in 4xx errors"
+              description: "4xx error rate is {{ "{{" }} $value | humanize {{ "}}" }}/s — 5x higher than baseline. Possible scanning or probing."
+
+      # ============================================
       # SLA ALERTS
       # ============================================
       - name: krystalinex.sla

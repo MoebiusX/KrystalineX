@@ -1,0 +1,26 @@
+{{- if .Values.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-grafana-dashboards
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'krystalinex'
+        orgId: 1
+        folder: 'KrystalineX'
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /etc/grafana/provisioning/dashboards
+          foldersFromFilesStructure: false
+  unified-observability.json: |
+{{ .Files.Get "dashboards/unified-observability.json" | indent 4 }}
+  k8s-cluster.json: |
+{{ .Files.Get "dashboards/k8s-cluster.json" | indent 4 }}
+{{- end }}
