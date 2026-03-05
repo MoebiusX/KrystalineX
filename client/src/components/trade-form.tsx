@@ -350,7 +350,7 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
             <CardContent className="space-y-5">
                 {/* Success Banner - Shows after trade */}
                 {lastTrade && (
-                    <div className="animate-in slide-in-from-top-2 duration-300 p-4 bg-gradient-to-r from-emerald-900/40 to-cyan-900/40 rounded-xl border border-emerald-500/30">
+                    <div className="animate-in slide-in-from-top-2 duration-300 p-4 bg-slate-800/70 rounded-xl border border-emerald-500/30">
                         <div className="flex items-start gap-3">
                             <div className="p-2 bg-emerald-500/20 rounded-full">
                                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />

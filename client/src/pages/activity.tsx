@@ -332,7 +332,7 @@ export default function Activity() {
                 )}
 
                 {/* Transparency Notice */}
-                <Card className="mt-8 bg-gradient-to-r from-cyan-900/20 to-indigo-900/20 border-cyan-500/20">
+                <Card className="mt-8 bg-slate-800/60 border-cyan-500/20">
                     <CardContent className="p-6">
                         <div className="flex items-start gap-4">
                             <div className="p-3 bg-cyan-500/20 rounded-xl">

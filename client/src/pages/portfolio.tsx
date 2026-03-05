@@ -120,7 +120,7 @@ export default function Portfolio() {
 
             <div className="container mx-auto px-4 py-8">
                 {/* Total Balance Card */}
-                <Card className="bg-gradient-to-r from-cyan-900/30 to-blue-900/30 border-cyan-500/30 mb-8 backdrop-blur">
+                <Card className="bg-slate-800/60 border-cyan-500/30 mb-8 backdrop-blur">
                     <CardContent className="py-8">
                         <div className="text-center">
                             <p className="text-cyan-100/60 mb-2">{t('portfolio.totalBalance')}</p>
@@ -133,7 +133,7 @@ export default function Portfolio() {
 
                 {/* First Trade CTA for New Users */}
                 {isNewUser && (
-                    <Card className="bg-gradient-to-r from-indigo-900/50 via-purple-900/50 to-pink-900/50 border-purple-500/30 mb-8 overflow-hidden relative">
+                    <Card className="bg-slate-800/60 border-purple-500/30 mb-8 overflow-hidden relative">
                         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-purple-500/10 via-transparent to-transparent" />
                         <CardContent className="py-6 relative">
                             <div className="flex flex-col md:flex-row items-center gap-6">

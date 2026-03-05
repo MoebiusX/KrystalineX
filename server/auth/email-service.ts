@@ -1,28 +1,28 @@
 /**
  * Email Service
  * 
- * Send emails via SMTP (MailDev in dev, real SMTP in prod).
+ * Send emails via Mailgun API.
  * Krystaline branding - Crystal Clear Crypto
  */
 
-import nodemailer from 'nodemailer';
+import FormData from 'form-data';
+import Mailgun from 'mailgun.js';
 import { config } from '../config';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('email');
 
-const transporter = nodemailer.createTransport({
-    host: config.smtp?.host || '127.0.0.1',  // Use IPv4 explicitly to avoid IPv6 timeout on Windows
-    port: config.smtp?.port || 1025,
-    secure: config.smtp?.secure || false,
-    // No auth needed for MailDev in dev
-    ...(config.smtp?.user && config.smtp?.password && {
-        auth: {
-            user: config.smtp.user,
-            pass: config.smtp.password,
-        },
-    }),
-});
+// Initialize Mailgun client (or null if no API key configured)
+const mg = config.mailgun
+    ? new Mailgun(FormData).client({
+        username: 'api',
+        key: config.mailgun.apiKey,
+        url: config.mailgun.url,
+    })
+    : null;
+
+const mailgunDomain = config.mailgun?.domain || 'mail.krystaline.io';
+const emailFrom = config.mailgun?.from || '"Krystaline" <no-reply@krystaline.io>';
 
 interface EmailOptions {
     to: string;
@@ -80,28 +80,33 @@ const emailWrapper = (content: string) => `
 
 export const emailService = {
     async send(options: EmailOptions): Promise<boolean> {
+        if (!mg) {
+            logger.warn({ to: options.to, subject: options.subject },
+                'Mailgun not configured (no MAILGUN_API_KEY). Email not sent.');
+            return false;
+        }
+
         try {
-            const info = await transporter.sendMail({
-                from: process.env.EMAIL_FROM || `"${BRAND.name}" <no-reply@krystaline.io>`,
-                to: options.to,
+            const data = await mg.messages.create(mailgunDomain, {
+                from: emailFrom,
+                to: [options.to],
                 subject: options.subject,
                 text: options.text,
                 html: options.html,
-            });
+            } as any);
 
             logger.info({
                 to: options.to,
                 subject: options.subject,
-                messageId: info.messageId
-            }, 'Email sent successfully');
-            logger.debug('Email preview available at http://localhost:1080');
+                messageId: data.id,
+            }, 'Email sent successfully via Mailgun');
             return true;
         } catch (error: unknown) {
             logger.error({
                 err: error,
                 to: options.to,
                 subject: options.subject
-            }, 'Failed to send email');
+            }, 'Failed to send email via Mailgun');
             return false;
         }
     },
@@ -154,6 +159,7 @@ export const emailService = {
                 </p>
                 <p style="color: #666; margin-top: 30px; font-size: 14px;">
                     Crystal clear transparency. Every transaction, every trade, fully observable.
+                    Want access to secured monitoring? use admin:askCarlos to access Grafana, Prometheus, GoAlert, and more!
                 </p>
             `),
             text: `Welcome to ${BRAND.name}!\n\nYou've been credited with test funds:\n- 10,000 USDT\n- 1 BTC\n- 10 ETH\n\nStart trading at http://localhost:5000/portfolio`

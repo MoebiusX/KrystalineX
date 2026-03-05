@@ -29,9 +29,12 @@ let ws: WebSocket | null = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let watchdogTimer: NodeJS.Timeout | null = null;
 let isRunning = false;
+let lastMessageTime = Date.now();
 
 // Watchdog interval - checks connection every 30 seconds
 const WATCHDOG_INTERVAL = 30000;
+// If no data received for 2 minutes, consider connection stale
+const STALE_THRESHOLD = 120000;
 
 /**
  * Binance Price Feed Service
@@ -123,10 +126,24 @@ export const binanceFeed = {
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         logger.warn('Watchdog: WebSocket not connected, reconnecting...');
         this.connect();
+        return;
+      }
+
+      // Staleness check: WS appears open but no data received
+      const timeSinceLastMessage = Date.now() - lastMessageTime;
+      if (timeSinceLastMessage > STALE_THRESHOLD) {
+        logger.warn({ staleSec: Math.round(timeSinceLastMessage / 1000) },
+          'Watchdog: WebSocket appears stale (no data received), force reconnecting...');
+        if (ws) {
+          ws.terminate(); // Force close (don't wait for graceful close)
+          ws = null;
+        }
+        priceService.setConnected(false, 'binance');
+        this.connect();
       }
     }, WATCHDOG_INTERVAL);
 
-    logger.info('Watchdog timer started (30s interval)');
+    logger.info('Watchdog timer started (30s interval, 2min staleness check)');
   },
 
   /**
@@ -177,6 +194,9 @@ export const binanceFeed = {
    * Handle incoming WebSocket message
    */
   handleMessage(message: any): void {
+    // Track last received message for staleness detection
+    lastMessageTime = Date.now();
+
     // Mini ticker format: { e: '24hrMiniTicker', s: 'BTCUSDT', c: '42000.00', ... }
     if (message.e === '24hrMiniTicker') {
       const symbol = message.s?.toLowerCase();

@@ -484,7 +484,7 @@ data:
             expr: |
               sum(rate(http_requests_total[5m]))
               > 5 * sum(rate(http_requests_total[1h] offset 1h))
-              and sum(rate(http_requests_total[1h] offset 1h)) > 0
+              and sum(rate(http_requests_total[1h] offset 1h)) > 1
             for: 3m
             labels:
               severity: warning
@@ -508,7 +508,7 @@ data:
             expr: |
               sum(rate(http_requests_total[2m]))
               > 10 * sum(rate(http_requests_total[1h] offset 1h))
-              and sum(rate(http_requests_total[1h] offset 1h)) > 0
+              and sum(rate(http_requests_total[1h] offset 1h)) > 1
             for: 1m
             labels:
               severity: critical
@@ -521,7 +521,7 @@ data:
             expr: |
               sum(rate(http_requests_total{status=~"4.."}[5m]))
               > 5 * sum(rate(http_requests_total{status=~"4.."}[1h] offset 1h))
-              and sum(rate(http_requests_total{status=~"4.."}[1h] offset 1h)) > 0
+              and sum(rate(http_requests_total{status=~"4.."}[1h] offset 1h)) > 0.5
             for: 3m
             labels:
               severity: warning
