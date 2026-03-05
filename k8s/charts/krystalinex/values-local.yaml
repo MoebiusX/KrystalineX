@@ -104,7 +104,7 @@ paymentProcessor:
 frontend:
   image:
     repository: moebiusx/krystalinex-frontend
-    tag: "v2.1.11"
+    tag: "v2.1.12"
     pullPolicy: Always
   resources:
     limits:
