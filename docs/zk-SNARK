@@ -1,78 +1,143 @@
-Title: Building "Proof of Integrity": Instrumenting zk-SNARKs with OpenTelemetry
+From Observability to Integrity: Instrumenting zk-SNARK Pipelines with OpenTelemetry
+
+TL;DR
+
+- Observability proves systems run correctly
+- zk-SNARKs prove systems cannot cheat
+- OpenTelemetry gives visibility into the proving pipeline
+- Together they enable verifiable exchanges
+
+
 I. Introduction
 
-    The Hook: The era of "trust me, bro" centralized exchanges is over. Users demand verifiable transparency, but publishing raw trade data destroys privacy. If Krystaline.io shows a BUY 0.0100 BTC at $72,375.78 in the public feed, how does the user know it really executed at that price — without the exchange revealing the trader's identity, wallet balance, or order routing internals?
+The era of "trust me, bro" crypto exchanges is ending.
+Users want verifiable transparency — but publishing raw trade data destroys privacy.
+The challenge is proving a trade was executed correctly without revealing who made it or what they hold.
 
-    The Evolution: Krystaline.io launched with "Proof of Observability™" — a public transparency dashboard at krystaline.io/ (the TransparencyDashboard component) showing live system uptime (99.9%+), real-time trade feeds from our PostgreSQL orders table, per-service health status (Trading Engine, Kong Gateway, RabbitMQ Matcher, Wallet Service), and OpenTelemetry traces that users can click through to Jaeger. Now we're evolving to "Proof of Integrity™" — where every metric claim is backed by a cryptographic proof that anyone can independently verify.
+At Krystaline.io, we call the solution Proof of Integrity™.
 
-    The Problem: zk-SNARKs are the perfect tool for this, allowing Krystaline to prove trades happened at claimed prices without revealing the userId (UUID), the user's BTC/USD wallet balances (stored as satoshis/cents in our wallets table), or the internal order routing through RabbitMQ. However, generating Groth16 proofs is computationally heavy — our kx-exchange server (Node.js 20 on Alpine, running via tsx) needs to produce proofs for each of the ~100+ daily trades without impacting the <1ms average execution time our hero dashboard advertises.
+A zk-SNARK is a cryptographic proof that allows a system to prove a statement is true without revealing the data used to compute it. In our case: proving a trade executed at a fair price, without exposing the trader's identity, wallet balance, or order routing.
 
-    The Thesis: To build a reliable, user-facing Zero-Knowledge pipeline, you must monitor the math. Our existing OpenTelemetry instrumentation — the same stack that already traces orders from the Kong API Gateway → kx-exchange → RabbitMQ order.submit → order.match → wallet settlement — becomes the backbone for monitoring proof generation latency, circuit constraint failures, and proving queue depth.
+Krystaline.io already operates under "Proof of Observability™" — a public dashboard at krystaline.io showing live system uptime, real-time trade feeds, per-service health (Trading Engine, Kong Gateway, RabbitMQ Matcher, Wallet Service), and OpenTelemetry traces clickable through to Jaeger. But observability has a limit:
+
+| Layer | What it proves |
+|-------|---------------|
+| Observability | The system behaved as expected |
+| Integrity | The system could not cheat |
+
+Observability proves the system behaved correctly. Zero-knowledge proofs prove the system could not behave dishonestly. That distinction is the foundation of Proof of Integrity™.
+
+But here is the part nobody talks about: generating these proofs is computationally heavy and operationally complex. To build a reliable, user-facing zero-knowledge pipeline, you must instrument the proving pipeline. This is where OpenTelemetry becomes the unsung hero of cryptographic infrastructure.
+
 
 II. What Are We Proving? (The Circuits)
 
-    Circuit 1: Trade Integrity — For every filled order in our orders table (status='filled'), we generate a proof that the trade executed honestly.
+Circuit 1: Trade Integrity
 
-        Public Inputs: tradeHash = SHA256(orderId + trace_id) — using the order_id (e.g., "ORD-1741182320000-1") and the OpenTelemetry trace_id already stored in the orders.trace_id column. Also publicized: priceRange — a ±0.5% bracket around the Binance feed price at execution time (sourced from our priceService which connects to Binance via WebSocket).
+For every filled order in our orders table (status='filled'), we generate a proof that the trade executed honestly.
 
-        Private Inputs: The exact fillPrice (stored in orders.price as a numeric), the quantity (orders.quantity), and the user_id (UUID FK to users.id). These are the three fields that must remain hidden — the price because it could reveal slippage strategy, the quantity because it reveals position sizing, and the userId because it's PII.
+    Public Inputs: tradeHash = SHA256(orderId + trace_id) — using the order_id (e.g., "ORD-1741182320000-1") and the OpenTelemetry trace_id already stored in the orders.trace_id column. Also publicized: priceRange — a ±0.5% bracket around the Binance feed price at execution time.
 
-        The Guarantee: Given a trade that appears in our public /api/v1/public/trades feed (served by transparencyService.getPublicTrades()), anyone can take the tradeHash, fetch the proof from our new /api/public/zk/proof/:tradeId endpoint, and verify: (1) the trade really executed within the stated price range from Binance, (2) it's linked to a genuine OpenTelemetry trace (verifiable in Jaeger at jaeger.krystaline.io), and (3) the proof was generated by the Krystaline circuit — all without learning who traded or the exact fill.
+    Private Inputs: The exact fillPrice (orders.price), the quantity (orders.quantity), and the user_id (UUID foreign key to users.id). These three fields must remain hidden — the price reveals slippage strategy, the quantity reveals position sizing, and the userId is PII.
 
-    Circuit 2: Solvency (The Merkle Sum Tree) — Using our wallets table (schema: id, user_id, asset, balance, available, locked), we prove that total BTC reserves ≥ total BTC liabilities and total USD reserves ≥ total USD liabilities.
+    The Guarantee: Given a trade that appears in our public /api/v1/public/trades feed, anyone can take the tradeHash, fetch the proof from /api/public/zk/proof/:tradeId, and verify: (1) the trade executed within the stated price range from Binance, (2) it links to a genuine OpenTelemetry trace verifiable in Jaeger, and (3) the proof was generated by the Krystaline circuit — all without learning who traded or the exact fill.
 
-        How it works: Each user's wallet row contributes a leaf to a Merkle Sum Tree. The leaf is hash(user_id, btc_balance, usd_balance). The tree root is the totalReserveCommitment (a Pedersen commitment). The proof shows the sum of all leaves equals the claimed total — without revealing any individual user's balance. Our wallets table stores balances as integers in smallest units (satoshis for BTC with 8 decimals, cents for USD with 2 decimals), which maps perfectly to circuit arithmetic (zk circuits operate on integers, not floats).
+Circuit 2: Solvency (The Merkle Sum Tree)
 
-        Timing: Trade Integrity proofs are generated in real-time via a post-settlement hook in OrderService.submitOrder() (after the RabbitMQ FILLED response and wallet update). Solvency proofs are generated every 60 seconds by a background timer in the zk-proof-service, querying SELECT asset, SUM(balance) FROM wallets GROUP BY asset.
+Using our wallets table (schema: id, user_id, asset, balance, available, locked), we prove that total BTC reserves ≥ total BTC liabilities and total USD reserves ≥ total USD liabilities.
+
+Each user's wallet row contributes a leaf to a Merkle Sum Tree: hash(user_id, btc_balance, usd_balance). The tree root is the totalReserveCommitment (a Pedersen commitment). The proof shows the sum of all leaves equals the claimed total — without revealing any individual balance. Our wallets table stores balances as integers in smallest units (satoshis for BTC, cents for USD), which maps directly to circuit arithmetic.
+
+    Timing: Trade Integrity proofs are generated in real-time, post-settlement. Solvency proofs are generated every 60 seconds from aggregate wallet queries.
+
+The conceptual pipeline:
+
+    Trade Event
+       ↓
+    OTel Trace ID
+       ↓
+    Witness Generation
+       ↓
+    Circuit Execution
+       ↓
+    zk Proof
+       ↓
+    Client Verification
+
 
 III. The Architecture: Node.js, Circom, and snarkjs
 
-    The Stack: Our server is a TypeScript monolith (server/ directory) running on Node.js 20-alpine, deployed as a Kubernetes pod (kx-krystalinex-server) via Helm chart (k8s/charts/krystalinex/). We chose snarkjs (iden3's JavaScript implementation) because it runs natively in our existing Node.js runtime — no sidecar containers, no gRPC bridges, no language boundary. Circom compiles the arithmetic circuits to .wasm (witness generator) and .zkey (proving key) files that snarkjs consumes via standard require()/import.
+A common misconception is that zero-knowledge systems require a separate Rust or GPU proving cluster. In practice, modern tooling like snarkjs allows proof generation to integrate directly into existing Node.js services. ZK systems do not need to live in separate infrastructure stacks.
 
-    Dispelling the Rust Myth: Circom's compiler is written in Rust, but this only runs once during the build phase (our Dockerfile.prod multi-stage build). The output — trade_integrity.wasm and trade_integrity_final.zkey — are static artifacts baked into the Docker image (server/circuits/ directory). At runtime, our kx-exchange server calls snarkjs.groth16.fullProve(inputs, wasmPath, zkeyPath) using pure JavaScript. No Rust, no C++, no wasm-bindgen at runtime. The proving key ceremony (Powers of Tau) is a one-time setup step we perform locally and commit the artifacts.
+Our server is a TypeScript monolith running on Node.js 20-alpine, deployed as a Kubernetes pod via Helm. We chose snarkjs (iden3's JavaScript implementation) because it runs natively in our existing runtime — no sidecar containers, no gRPC bridges, no language boundary. Circom compiles arithmetic circuits to .wasm (witness generator) and .zkey (proving key) files that snarkjs consumes via standard import.
 
-    The Phased Rollout: We're taking a pragmatic engineering approach in two phases:
-        Phase 1 (Immediate): A "simulation-grade" proof service (server/services/zk-proof-service.ts) that generates SHA256-based commitments mirroring the exact API shape of real Groth16 proofs — same endpoint paths (/api/public/zk/proof/:tradeId, /api/public/zk/verify/:tradeId, /api/public/zk/stats), same JSON response structure ({proof, publicSignals, verified}), same frontend verification UX. This unblocks the hero page development and lets us ship the visual experience immediately with the next frontend build (v2.1.12+).
-        Phase 2 (Follow-up): Swap in the compiled Circom circuits. Because the API contract is identical, the frontend doesn't change — only the backend service implementation.
+Circom's compiler is written in Rust, but this only runs once during the Docker build phase. The output — trade_integrity.wasm and trade_integrity_final.zkey — are static artifacts baked into the image. At runtime, the kx-exchange server calls snarkjs.groth16.fullProve() using pure JavaScript. No Rust at runtime.
+
+Our first trade integrity circuit compiles to ~180k constraints and produces proofs in ~400ms on commodity hardware.
+
+Phased Rollout:
+
+    Phase 1 (Immediate): A mock proving service that generates SHA256-based commitments mirroring the exact API shape of real Groth16 proofs — same endpoints, same JSON structure, same frontend verification UX. This unblocks hero page development and ships the visual experience immediately.
+
+    Phase 2 (Follow-up): Swap in compiled Circom circuits. The API contract is identical — only the backend implementation changes.
+
 
 IV. The Missing Link: Why OpenTelemetry is Mandatory for ZK
 
-    ZK is a Compute Pipeline, Not a Function Call: Generating a single Groth16 proof involves four sequential operations that we need to trace as individual OTel spans under the trade's existing trace context:
-        1. data.fetch — Query orders + wallets tables for the private inputs (userId, fillPrice, quantity, wallet balances). ~2-5ms via our existing db.query() calls.
-        2. witness.generate — Run the Circom witness calculator (WASM execution). CPU-bound, ~50-200ms depending on circuit complexity.
-        3. proof.generate — snarkjs.groth16.prove(). The heavy computation — elliptic curve pairings. ~500ms-2s for our circuit size.
-        4. proof.verify — snarkjs.groth16.verify(). Lightweight sanity check. ~10-50ms.
-        If step 3 stalls (e.g., memory pressure from concurrent proofs), the existing RabbitMQ order.match span would complete normally but the proof span would hang — without dedicated tracing, this would be invisible.
+The biggest challenge with zk-SNARKs in production is not the cryptography — it's operating the proving pipeline reliably.
 
-    Distributed Tracing (traceId): Our orders table already stores the OpenTelemetry trace_id for every trade (populated in OrderService.createOrderRecord()). The zk-proof-service will create child spans under this same traceId using our existing tracer (trace.getTracer('kx-exchange')). This means opening a trade in Jaeger shows the complete lifecycle: HTTP POST /api/v1/orders → order.submit → RabbitMQ publish → order.match → wallet.settle → zk.prove — all in one trace waterfall. The zk spans get attributes like zk.circuit='trade_integrity', zk.proof_size_bytes, zk.constraint_count, and zk.proving_time_ms.
+ZK pipelines are distributed systems problems, not just cryptography problems.
 
-    Deep Performance Metrics: We'll extend our existing Prometheus metrics (server/metrics/prometheus.ts which already exports recordTrade() and recordOrderMetrics()) with new ZK-specific counters and histograms:
-        kx_zk_proofs_generated_total{circuit="trade_integrity|solvency"} — Counter
-        kx_zk_proof_generation_seconds{circuit, phase} — Histogram (phases: witness, prove, verify)
-        kx_zk_proof_queue_depth — Gauge tracking backlog
-        kx_zk_proof_failures_total{circuit, reason} — Counter for constraint violations, timeouts, etc.
-        These metrics feed into our existing Grafana dashboard (krystalinex-unified) and alert via GoAlert when proof generation latency exceeds SLA (e.g., >5s).
+Generating a single Groth16 proof is a multi-stage proving pipeline with four sequential operations, each traced as individual OTel spans under the trade's existing trace context:
 
-    Contextual Error Logging: Our structured logger (server/lib/logger.ts, Pino-based) already redacts sensitive fields. When a zk circuit fails (e.g., a constraint violation because fillPrice fell outside the range), the OTel span captures circuit='trade_integrity', error='constraint_not_satisfied', constraint_index=42, orderId='ORD-1741182320000-1' — but never logs the private inputs (fillPrice, quantity, userId). The developer can correlate the span to the specific order via orderId and trace_id without ever seeing the user's data.
+    1. data.fetch — Query orders + wallets tables for private inputs. ~2-5ms.
+    2. witness.generate — Run the Circom witness calculator (WASM). CPU-bound, ~50-200ms.
+    3. proof.generate — snarkjs.groth16.prove(). Elliptic curve pairings. ~400ms for our circuit.
+    4. proof.verify — snarkjs.groth16.verify(). Sanity check. ~10-50ms.
+
+If step 3 stalls due to memory pressure from concurrent proofs, the RabbitMQ order.match span completes normally but the proof span hangs — without dedicated tracing, this is invisible.
+
+What OTel gives us:
+
+    Latency visibility — per-phase duration histograms (witness vs prove vs verify)
+    Circuit failure debugging — constraint violation errors with orderId correlation, without logging private inputs
+    Proof queue backpressure — gauge tracking proving queue depth to trigger pod scaling
+    Proving throughput — proofs/second counter feeding Grafana dashboards and GoAlert alerts
+
+Our orders table already stores the OpenTelemetry trace_id for every trade. The zk-proof-service creates child spans under this same traceId. Opening a trade in Jaeger shows the complete lifecycle: HTTP POST /api/v1/orders → order.submit → RabbitMQ publish → order.match → wallet.settle → zk.prove — all in one trace waterfall.
+
+ZK-specific Prometheus metrics:
+
+    kx_zk_proofs_generated_total{circuit="trade_integrity|solvency"}
+    kx_zk_proof_generation_seconds{circuit, phase}
+    kx_zk_proof_queue_depth
+    kx_zk_proof_failures_total{circuit, reason}
+
 
 V. The User Experience: "Don't Trust, Verify"
 
-    The Hero Page Dashboard: The TransparencyDashboard component (client/src/components/transparency-dashboard.tsx, currently 815 lines) gets a new section between the "Why Observability Matters" comparison grid (line ~496) and the "Live Trade Feed" (line ~573). This section — styled to match the existing glassmorphic dark theme (bg-slate-900/80, backdrop-blur-2xl, border-cyan-500/20, rounded-3xl) — shows:
-        • A large "Zero-Knowledge Proofs" header with a lock icon and a LIVE badge
-        • Three stat cards: "Proofs Generated" (total count), "Verification Rate" (100% target), "Avg Proof Time" (target <2s)
-        • A visual "Proof Pipeline" animation showing: Trade → Hash → Circuit → Proof → Verify ✓, with animated dots flowing between nodes (matching the existing "ant swarm" trace visualization pattern at line ~366)
-        All data fetched from GET /api/public/zk/stats via react-query with a 5s refetchInterval (matching the existing status polling pattern).
+The TransparencyDashboard at krystaline.io gets a new "Zero-Knowledge Proofs" section showing live stats: proofs generated, verification rate, average proof time. A visual "Proof Pipeline" animation shows Trade → Hash → Circuit → Proof → Verify ✓, with flowing dots matching the existing trace visualization.
 
-    Client-Side Verification: When a user clicks any trade row in the Live Trade Feed (the existing onClick handler at line ~610 currently opens Jaeger), we add a secondary action: a "Verify Proof" button that:
-        1. Fetches GET /api/public/zk/proof/{tradeId} — returns {proof, publicSignals, verificationKey}
-        2. Runs snarkjs.groth16.verify(verificationKey, publicSignals, proof) entirely in the browser (snarkjs is ~200KB gzipped and runs in all modern browsers)
-        3. Displays an animated ✓ checkmark with "Proof Valid — Verified locally in your browser" text
-        This is the "Don't Trust, Verify" moment — the user doesn't have to trust our server's verification endpoint. They run the math themselves.
+When a user clicks any trade in the Live Trade Feed, a "Verify Proof" button:
 
-    Visualizing the Math: The ZK section connects visually to the existing OpenTelemetry trace visualization. The "ant swarm" animation (white dots flowing between Gateway → Exchange → Matcher → Settle nodes, line ~377) gets a fifth node: "ZK Prove" with a purple accent color, showing that every trade trace now extends into cryptographic verification. When a user expands a trace in the TraceViewer component (client/src/components/trace-viewer.tsx), the span list includes the zk.prove span with its duration — making the proof generation time as visible as the RabbitMQ matching time.
+    1. Fetches the proof from /api/public/zk/proof/{tradeId}
+    2. The browser downloads the verification key and runs snarkjs.groth16.verify() locally
+    3. Displays an animated ✓ with "Proof Valid — Verified locally in your browser"
+
+The user does not trust our server's verification endpoint. They run the math themselves. That is the "Don't Trust, Verify" moment.
+
+The existing "ant swarm" trace animation (dots flowing between Gateway → Exchange → Matcher → Settle) gets a fifth node: "ZK Prove" — making proof generation time as visible as matching time.
+
 
 VI. Conclusion
 
-    Summary: Krystaline.io's existing OpenTelemetry instrumentation — tracing every order from HTTP ingress through RabbitMQ matching to wallet settlement — provides the operational proof that the system is running correctly. zk-SNARKs layer on top to provide the cryptographic proof that it is behaving honestly. Together, they form "Proof of Integrity™": a system where the monitoring infrastructure (observable via Grafana, Jaeger, and Prometheus) guarantees the ZK pipeline is healthy, while the ZK proofs guarantee the trade data shown on the hero dashboard is mathematically truthful.
+Observability proves a system is running correctly.
+Zero-knowledge proofs prove it cannot cheat.
 
-    The Future: By shipping Proof of Integrity, Krystaline.io sets a new standard for centralized crypto exchanges — positioning between the full transparency of DeFi (where everything is on-chain but gas-expensive) and the total opacity of traditional CEXs. As the Circom circuits mature, we can extend proofs to cover: BTC transfer integrity (proving the transactions table entries are valid), cross-user fairness (proving no front-running via order timestamp proofs), and regulatory compliance proofs (proving AML checks passed without revealing KYC data). The infrastructure is already in place — the OTel traces, the PostgreSQL data model, the Kubernetes orchestration — we're just adding the mathematical seal.
+The next generation of exchanges will need both.
+
+Our existing OpenTelemetry instrumentation — tracing every order from HTTP ingress through RabbitMQ matching to wallet settlement — guarantees the ZK pipeline is healthy. The ZK proofs guarantee the trade data shown is mathematically truthful. Together, they form Proof of Integrity™.
+
+At Krystaline.io, we believe Proof of Integrity™ will become the new baseline for financial infrastructure.
+
+As circuits mature, we extend proofs to cover BTC transfer integrity, cross-user fairness (order timestamp proofs), and regulatory compliance (proving AML checks passed without revealing KYC data). The infrastructure is already in place — OTel traces, PostgreSQL data model, Kubernetes orchestration. We are adding the mathematical seal.

@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, TrendingUp, Shield, Zap, Users, Eye } from 'lucide-react';
+import { Activity, TrendingUp, Shield, Zap, Users, Eye, AlertTriangle } from 'lucide-react';
 import { TradeTraceTimeline } from './trade-trace-timeline';
 import { getJaegerTraceUrl } from '@/lib/trace-utils';
 import { useLocation } from 'wouter';
@@ -146,6 +146,14 @@ export function TransparencyDashboard() {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-12">
+
+          {/* Demo Disclaimer Banner */}
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-start sm:items-center gap-3 animate-in fade-in duration-700">
+            <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5 sm:mt-0" />
+            <p className="text-sm text-amber-200/90 leading-relaxed">
+              <span className="font-semibold text-amber-300">Observability Demo</span> — Krystaline.io is a technology demonstration showcasing distributed tracing, real-time monitoring, and cryptographic verification infrastructure. No real funds are held, traded, or transferred. BTC/USD prices are sourced from Binance for simulation purposes only. This is not a regulated financial service.
+            </p>
+          </div>
           {/* Hero Section - Full Redesign */}
           <div className="relative min-h-[85vh] flex flex-col justify-center overflow-hidden">
 
@@ -798,12 +806,20 @@ export function TransparencyDashboard() {
 
 
           {/* Footer */}
-          <div className="text-center text-sm text-cyan-100/60 pt-8 space-y-3 animate-in fade-in duration-1000 delay-1000">
+          <div className="text-center text-sm text-cyan-100/60 pt-8 space-y-4 animate-in fade-in duration-1000 delay-1000">
             <p className="font-mono">Last updated: {status.timestamp ? new Date(status.timestamp).toLocaleString() : 'N/A'}</p>
             <div className="flex items-center justify-center gap-2">
               <Shield className="h-4 w-4 text-cyan-400" />
               <p className="text-cyan-100/80">
                 Building trust through transparency • Powered by OpenTelemetry
+              </p>
+            </div>
+            <div className="border-t border-cyan-500/10 pt-4 mt-4 max-w-2xl mx-auto">
+              <p className="text-xs text-cyan-100/40 leading-relaxed">
+                Krystaline.io is an observability technology demonstration platform. No real cryptocurrency or fiat currency is held, traded, or transferred.
+                All balances and transactions are simulated for demonstration purposes. Market data is sourced from public Binance feeds.
+                This platform is not a regulated financial service and does not constitute investment advice.
+                © {new Date().getFullYear()} Krystaline.io — Technology Demo
               </p>
             </div>
           </div>
