@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -129,16 +129,33 @@ export default function Dashboard() {
     const params = new URLSearchParams(searchString);
     if (isNewUser === 'true' || params.get('welcome') === 'true') {
       setShowWelcome(true);
+      // Reset journey flags for genuinely new users so the progress starts fresh
+      localStorage.removeItem('hasCompletedFirstTrade');
+      localStorage.removeItem('hasViewedTrace');
+      setHasCompletedFirstTrade(false);
+      setHasViewedTrace(false);
     }
   }, [searchString]);
 
   const { data: orders, isLoading: ordersLoading } = useQuery<Order[]>({
-    queryKey: ["/api/v1/orders"],
+    queryKey: ["/api/v1/orders", { userId: currentUser }],
+    queryFn: async () => {
+      const kongUrl = import.meta.env.VITE_KONG_URL || '';
+      const res = await fetch(`${kongUrl}/api/v1/orders?userId=${currentUser}`);
+      return res.json();
+    },
+    enabled: !!currentUser,
     refetchInterval: 3000,
   });
 
   const { data: transfers, isLoading: transfersLoading } = useQuery<Transfer[]>({
-    queryKey: ["/api/v1/transfers"],
+    queryKey: ["/api/v1/transfers", { userId: currentUser }],
+    queryFn: async () => {
+      const kongUrl = import.meta.env.VITE_KONG_URL || '';
+      const res = await fetch(`${kongUrl}/api/v1/transfers?userId=${currentUser}`);
+      return res.json();
+    },
+    enabled: !!currentUser,
     refetchInterval: 3000,
   });
 
@@ -214,11 +231,19 @@ export default function Dashboard() {
     }, 0);
   };
 
-  // Track first trade completion
+  // Track first trade completion — only when order count INCREASES during this session
+  const initialOrderCountRef = useRef<number | null>(null);
   useEffect(() => {
-    if (orders && orders.length > 0) {
+    if (orders == null) return;
+    // Capture the initial order count on first load
+    if (initialOrderCountRef.current === null) {
+      initialOrderCountRef.current = orders.length;
+      return;
+    }
+    // Only mark first trade if a NEW order appeared during this session
+    if (orders.length > initialOrderCountRef.current) {
       const hadFirstTrade = localStorage.getItem('hasCompletedFirstTrade');
-      if (!hadFirstTrade && localStorage.getItem('isNewUser')) {
+      if (!hadFirstTrade) {
         localStorage.setItem('hasCompletedFirstTrade', 'true');
         setHasCompletedFirstTrade(true);
       }
@@ -246,7 +271,7 @@ export default function Dashboard() {
             <div className="mb-8">
               <JourneyProgress currentStep={hasViewedTrace ? 4 : hasCompletedFirstTrade ? 3 : 2} />
 
-              <Card className="bg-gradient-to-r from-cyan-900/40 via-blue-900/40 to-indigo-900/40 border-cyan-500/30 relative overflow-hidden">
+              <Card className="bg-slate-800/70 border-cyan-500/30 relative overflow-hidden">
                 <button
                   onClick={() => {
                     setShowWelcome(false);
@@ -461,7 +486,7 @@ export default function Dashboard() {
             {/* Right Column - Portfolio + Traces */}
             <div className="space-y-6">
               {/* Portfolio Panel */}
-              <Card className="bg-gradient-to-br from-cyan-900/30 via-slate-900/60 to-blue-900/30 border-cyan-500/30 backdrop-blur">
+              <Card className="bg-slate-800/60 border-cyan-500/30 backdrop-blur">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-lg font-semibold text-white flex items-center justify-between">
                     <div className="flex items-center gap-2">

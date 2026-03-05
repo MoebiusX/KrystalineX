@@ -461,14 +461,16 @@ export class OrderService {
         }, 'Wallet updated after trade');
     }
 
-    async getOrders(limit: number = 10): Promise<Order[]> {
-        const { rows } = await db.query(
-            `SELECT id, order_id, pair, side, type, quantity, filled, status, price, trace_id, created_at
-             FROM orders
-             ORDER BY created_at DESC
-             LIMIT $1`,
-            [limit]
-        );
+    async getOrders(limit: number = 10, userId?: string): Promise<Order[]> {
+        const query = userId
+            ? `SELECT id, order_id, pair, side, type, quantity, filled, status, price, trace_id, created_at
+               FROM orders WHERE user_id = $2
+               ORDER BY created_at DESC LIMIT $1`
+            : `SELECT id, order_id, pair, side, type, quantity, filled, status, price, trace_id, created_at
+               FROM orders
+               ORDER BY created_at DESC LIMIT $1`;
+        const params = userId ? [limit, userId] : [limit];
+        const { rows } = await db.query(query, params);
 
         return rows.map(row => ({
             orderId: row.order_id || row.id,
@@ -485,8 +487,8 @@ export class OrderService {
         }));
     }
 
-    async getTransfers(limit: number = 10) {
-        return storage.getTransfers(limit);
+    async getTransfers(limit: number = 10, userId?: string) {
+        return storage.getTransfers(limit, userId);
     }
 
     async clearAllData() {

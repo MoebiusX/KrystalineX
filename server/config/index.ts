@@ -69,12 +69,11 @@ const configSchema = z.object({
     model: z.string().default('llama3.2:1b'),
   }).optional(),
 
-  smtp: z.object({
-    host: z.string().default('localhost'),
-    port: z.number().int().positive().default(1025),
-    secure: z.boolean().default(false),
-    user: z.string().optional(),
-    password: z.string().optional(),
+  mailgun: z.object({
+    apiKey: z.string().min(1, 'MAILGUN_API_KEY is required'),
+    domain: z.string().default('mail.krystaline.io'),
+    url: z.string().default('https://api.eu.mailgun.net'),
+    from: z.string().default('"Krystaline" <no-reply@krystaline.io>'),
   }).optional(),
 
   logging: z.object({
@@ -198,12 +197,11 @@ function loadConfig() {
       model: process.env.OLLAMA_MODEL || 'llama3.2:1b',
     } : undefined,
 
-    smtp: process.env.SMTP_HOST ? {
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 1025,
-      secure: process.env.SMTP_SECURE === 'true',
-      user: process.env.SMTP_USER,
-      password: process.env.SMTP_PASSWORD,
+    mailgun: process.env.MAILGUN_API_KEY ? {
+      apiKey: process.env.MAILGUN_API_KEY,
+      domain: process.env.MAILGUN_DOMAIN || 'mail.krystaline.io',
+      url: process.env.MAILGUN_URL || 'https://api.eu.mailgun.net',
+      from: process.env.EMAIL_FROM || '"Krystaline" <no-reply@krystaline.io>',
     } : undefined,
 
     logging: {

@@ -539,17 +539,24 @@ export class PostgresStorage implements IStorage {
     };
   }
 
-  async getTransfers(limit: number = 10): Promise<Transfer[]> {
-    const { rows } = await this.pool.query(
-      `SELECT t.id, t.amount, t.status, t.reference_id, t.description, t.created_at,
-              u.email as from_email
-       FROM transactions t
-       JOIN users u ON t.user_id = u.id
-       WHERE t.type IN ('trade_sell', 'trade_buy')
-       ORDER BY t.created_at DESC
-       LIMIT $1`,
-      [limit]
-    );
+  async getTransfers(limit: number = 10, userId?: string): Promise<Transfer[]> {
+    const query = userId
+      ? `SELECT t.id, t.amount, t.status, t.reference_id, t.description, t.created_at,
+                u.email as from_email
+         FROM transactions t
+         JOIN users u ON t.user_id = u.id
+         WHERE t.type IN ('trade_sell', 'trade_buy') AND t.user_id = $2
+         ORDER BY t.created_at DESC
+         LIMIT $1`
+      : `SELECT t.id, t.amount, t.status, t.reference_id, t.description, t.created_at,
+                u.email as from_email
+         FROM transactions t
+         JOIN users u ON t.user_id = u.id
+         WHERE t.type IN ('trade_sell', 'trade_buy')
+         ORDER BY t.created_at DESC
+         LIMIT $1`;
+    const params = userId ? [limit, userId] : [limit];
+    const { rows } = await this.pool.query(query, params);
 
     return rows.map(row => ({
       transferId: row.id,

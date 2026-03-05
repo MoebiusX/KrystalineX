@@ -128,7 +128,7 @@ export function TradeVerifiedModal({
 
                 {/* Trace CTA - THE MAIN POINT */}
                 {traceId && (
-                    <div className="bg-gradient-to-r from-purple-900/30 to-blue-900/30 rounded-xl p-4 border border-purple-500/30">
+                    <div className="bg-slate-800/60 rounded-xl p-4 border border-purple-500/30">
                         <div className="flex items-center gap-3 mb-3">
                             <div className="p-2 rounded-lg bg-purple-500/20">
                                 <Eye className="w-5 h-5 text-purple-400" />
