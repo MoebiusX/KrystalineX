@@ -45,6 +45,10 @@ docs/api/
 docs/*.zip
 docs-bundle.zip
 
+# Grafana dashboard exports (raw exports with timestamps, clean copies in k8s/charts/krystalinex/dashboards/)
+docs/*Dashboard*.json
+docs/*Observability*.json
+
 # Model training artifacts (large binary files)
 lora-anomaly-analyzer/
 last_run_prepared/

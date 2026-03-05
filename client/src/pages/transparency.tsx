@@ -340,7 +340,7 @@ export default function TransparencyPage() {
                 )}
 
                 {/* What We Monitor */}
-                <Card className="bg-gradient-to-r from-cyan-900/20 to-indigo-900/20 border-cyan-500/20">
+                <Card className="bg-slate-800/60 border-cyan-500/20">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 text-cyan-100">
                             <Eye className="w-5 h-5 text-cyan-400" />

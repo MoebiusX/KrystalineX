@@ -267,10 +267,11 @@ export function registerRoutes(app: Express) {
     });
   });
 
-  // Get orders
+  // Get orders (filtered by userId if provided)
   app.get("/api/v1/orders", async (req: Request, res: Response) => {
     try {
-      const orders = await orderService.getOrders(10);
+      const userId = req.query.userId as string | undefined;
+      const orders = await orderService.getOrders(10, userId);
       res.json(orders);
     } catch (error: unknown) {
       res.status(500).json({ error: "Failed to fetch orders" });
@@ -333,10 +334,11 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Get transfers
+  // Get transfers (filtered by userId if provided)
   app.get("/api/v1/transfers", async (req: Request, res: Response) => {
     try {
-      const transfers = await orderService.getTransfers(10);
+      const userId = req.query.userId as string | undefined;
+      const transfers = await orderService.getTransfers(10, userId);
       res.json(transfers);
     } catch (error: unknown) {
       res.status(500).json({ error: "Failed to fetch transfers" });
@@ -423,10 +425,20 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/v1/traces", async (req: Request, res: Response) => {
     try {
+      const userId = req.query.userId as string | undefined;
       const traceGroups = new Map<string, any[]>();
+
+      // If userId provided, get the user's order traceIds to filter
+      let userTraceIds: Set<string> | null = null;
+      if (userId) {
+        const userOrders = await orderService.getOrders(100, userId);
+        userTraceIds = new Set(userOrders.map(o => o.traceId).filter(Boolean));
+      }
 
       traces.forEach(span => {
         const traceId = span.traceId;
+        // If filtering by user, skip traces that don't belong to user's orders
+        if (userTraceIds && !userTraceIds.has(traceId)) return;
         if (!traceGroups.has(traceId)) {
           traceGroups.set(traceId, []);
         }

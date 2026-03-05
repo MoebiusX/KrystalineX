@@ -83,7 +83,7 @@ export interface IStorage {
 
   // Transfer operations (now uses addresses)
   createTransfer(data: { transferId: string; fromAddress: string; toAddress: string; amount: number; traceId: string; spanId: string }): Promise<Transfer>;
-  getTransfers(limit?: number): Promise<Transfer[]>;
+  getTransfers(limit?: number, userId?: string): Promise<Transfer[]>;
   updateTransfer(transferId: string, status: "PENDING" | "COMPLETED" | "FAILED"): Promise<Transfer | undefined>;
 
   // Order operations
@@ -357,8 +357,11 @@ export class MemoryStorage implements IStorage {
     return transfer;
   }
 
-  async getTransfers(limit: number = 10): Promise<Transfer[]> {
-    const allTransfers = Array.from(this.transfers.values());
+  async getTransfers(limit: number = 10, userId?: string): Promise<Transfer[]> {
+    let allTransfers = Array.from(this.transfers.values());
+    if (userId) {
+      allTransfers = allTransfers.filter(t => t.fromUserId === userId || t.toUserId === userId);
+    }
     return allTransfers
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit);

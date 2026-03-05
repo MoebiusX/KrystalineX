@@ -126,8 +126,29 @@ function TraceItem({ trace, onTraceViewed }: { trace: TraceData; onTraceViewed?:
 }
 
 export function TraceViewer() {
+  // Get current user ID for filtering
+  const getCurrentUserId = (): string | null => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const parsed = JSON.parse(userData);
+        return parsed.id || null;
+      }
+    } catch { }
+    return null;
+  };
+  const currentUserId = getCurrentUserId();
+
   const { data: traces, isLoading } = useQuery<TraceData[]>({
-    queryKey: ['/api/v1/traces'],
+    queryKey: ['/api/v1/traces', { userId: currentUserId }],
+    queryFn: async () => {
+      const kongUrl = import.meta.env.VITE_KONG_URL || '';
+      const url = currentUserId
+        ? `${kongUrl}/api/v1/traces?userId=${currentUserId}`
+        : `${kongUrl}/api/v1/traces`;
+      const res = await fetch(url);
+      return res.json();
+    },
     refetchInterval: 3000
   });
 
@@ -194,7 +215,7 @@ export function TraceViewer() {
 
   return (
     <Card className="bg-slate-900 border-slate-700 border-2 border-purple-500/30">
-      <CardHeader className="bg-gradient-to-r from-purple-900/20 to-indigo-900/20">
+      <CardHeader className="bg-slate-800/60">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="flex items-center space-x-2 text-white">
@@ -251,7 +272,7 @@ export function TraceViewer() {
             ))}
 
             {/* Jaeger CTA */}
-            <div className="mt-4 p-4 bg-gradient-to-r from-indigo-900/30 to-purple-900/30 rounded-lg border border-indigo-500/20">
+            <div className="mt-4 p-4 bg-slate-800/60 rounded-lg border border-indigo-500/20">
               <p className="text-sm text-indigo-200/80 mb-2">Want the full picture?</p>
               <a
                 href={`${import.meta.env.VITE_JAEGER_URL || 'http://localhost:16686'}`}

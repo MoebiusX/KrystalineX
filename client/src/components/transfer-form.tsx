@@ -67,8 +67,11 @@ export function TransferForm() {
         enabled: !!currentUser,
     });
 
-    // Filter out current user from recipients
-    const availableRecipients = users?.filter(u => u.id !== currentUser?.id) || [];
+    // Only show seed users as transfer recipients (exclude current user)
+    const ALLOWED_RECIPIENTS = ['seed.user.primary@krystaline.io', 'seed.user.secondary@krystaline.io'];
+    const availableRecipients = users?.filter(u =>
+        u.id !== currentUser?.id && ALLOWED_RECIPIENTS.includes(u.email || '')
+    ) || [];
 
     const form = useForm<TransferFormData>({
         resolver: zodResolver(transferSchema),
