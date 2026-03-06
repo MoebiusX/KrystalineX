@@ -334,3 +334,62 @@ export type TransparencyMetrics = z.infer<typeof transparencyMetricsSchema>;
 export type TradeTrace = z.infer<typeof tradeTraceSchema>;
 export type DbOrderRow = z.infer<typeof dbOrderRowSchema>;
 export type DbTradeRow = z.infer<typeof dbTradeRowSchema>;
+
+// ============================================
+// ZERO-KNOWLEDGE PROOF SCHEMAS
+// ============================================
+
+// ZK Proof - generated for each filled trade
+export const zkProofSchema = z.object({
+  tradeId: z.string(),
+  tradeHash: z.string(),              // SHA256(orderId + traceId)
+  proof: z.string(),                  // Phase 1: SHA256 commitment, Phase 2: Groth16 proof
+  publicSignals: z.array(z.string()), // [tradeHash, priceLow, priceHigh]
+  verificationKey: z.string(),
+  circuit: z.literal('trade_integrity'),
+  generatedAt: z.string(),
+  provingTimeMs: z.number(),
+});
+
+// ZK Solvency Proof - aggregate proof of reserves
+export const zkSolvencySchema = z.object({
+  totalReserveCommitment: z.string(),
+  assets: z.object({ btc: z.number(), usd: z.number() }),
+  circuit: z.literal('solvency'),
+  generatedAt: z.string(),
+  nextProofAt: z.string(),
+});
+
+// ZK Stats - dashboard metrics
+export const zkStatsSchema = z.object({
+  totalProofsGenerated: z.number(),
+  totalVerifications: z.number(),
+  verificationSuccessRate: z.number(),
+  avgProvingTimeMs: z.number(),
+  latestProofTimestamp: z.string().nullable(),
+  solvencyProofAge: z.number(),
+  solvency: z.object({
+    totalReserveCommitment: z.string().nullable(),
+    lastGeneratedAt: z.string().nullable(),
+  }),
+  circuits: z.object({
+    tradeIntegrity: z.object({ count: z.number(), avgMs: z.number() }),
+    solvency: z.object({ count: z.number(), avgMs: z.number() }),
+  }),
+});
+
+// ZK Verification Result
+export const zkVerifyResultSchema = z.object({
+  verified: z.boolean(),
+  tradeId: z.string(),
+  tradeHash: z.string(),
+  proof: z.string(),
+  publicSignals: z.array(z.string()),
+  verifiedAt: z.string(),
+});
+
+// Export ZK types
+export type ZKProof = z.infer<typeof zkProofSchema>;
+export type ZKSolvencyProof = z.infer<typeof zkSolvencySchema>;
+export type ZKStats = z.infer<typeof zkStatsSchema>;
+export type ZKVerifyResult = z.infer<typeof zkVerifyResultSchema>;
