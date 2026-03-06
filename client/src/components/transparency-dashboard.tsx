@@ -87,6 +87,7 @@ export function TransparencyDashboard() {
   const [zkStats, setZkStats] = useState<ZKStats | null>(null);
   const [verifyingTrade, setVerifyingTrade] = useState<string | null>(null);
   const [verifiedTrades, setVerifiedTrades] = useState<Set<string>>(new Set());
+  const [failedTrades, setFailedTrades] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Check if user is logged in
@@ -806,7 +807,10 @@ export function TransparencyDashboard() {
                         </span>
                       ) : (
                         <button
-                          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 hover:text-purple-200 transition-all disabled:opacity-50"
+                          className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-50 ${failedTrades.has(trade.tradeId)
+                            ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
+                            : 'bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 hover:text-purple-200'
+                            }`}
                           disabled={verifyingTrade === trade.tradeId}
                           onClick={async (e) => {
                             e.stopPropagation();
@@ -817,17 +821,23 @@ export function TransparencyDashboard() {
                                 const result = await res.json();
                                 if (result.verified) {
                                   setVerifiedTrades(prev => new Set(prev).add(trade.tradeId));
+                                } else {
+                                  setFailedTrades(prev => new Set(prev).add(trade.tradeId));
                                 }
+                              } else {
+                                // 404 = no proof cached for this trade
+                                setFailedTrades(prev => new Set(prev).add(trade.tradeId));
                               }
                             } catch (err) {
                               console.error('Proof verification failed:', err);
+                              setFailedTrades(prev => new Set(prev).add(trade.tradeId));
                             } finally {
                               setVerifyingTrade(null);
                             }
                           }}
                         >
                           <Lock className="h-3 w-3" />
-                          {verifyingTrade === trade.tradeId ? 'Verifying...' : 'Verify'}
+                          {verifyingTrade === trade.tradeId ? 'Verifying...' : failedTrades.has(trade.tradeId) ? 'Pending' : 'Verify'}
                         </button>
                       )}
                     </div>

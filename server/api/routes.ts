@@ -76,8 +76,8 @@ export function registerRoutes(app: Express) {
       // Get real users from database with their wallet addresses
       const result = await db.query(
         `SELECT u.id, u.email, u.status, w.address as wallet_address
-         FROM users u
-         LEFT JOIN wallets w ON u.id = w.user_id AND w.asset = 'BTC'
+         FROM crypto_exchange.users u
+         LEFT JOIN crypto_exchange.wallets w ON u.id = w.user_id AND w.asset = 'BTC'
          WHERE u.status = 'verified'
          ORDER BY u.created_at DESC LIMIT 50`
       );
