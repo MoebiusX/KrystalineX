@@ -63,3 +63,9 @@ values-secrets.yaml
 
 # VPN configs
 *.ovpn
+
+# Circom compilation intermediates (large, not needed at runtime)
+server/circuits/build/*.ptau
+server/circuits/build/*_0.zkey
+server/circuits/build/*.r1cs
+server/circuits/build/*.sym

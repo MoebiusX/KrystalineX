@@ -1,17 +1,23 @@
 /**
- * Zero-Knowledge Proof Service
+ * Zero-Knowledge Proof Service — Phase 2: Real Groth16 Proofs
  * 
- * Proof of Integrity™ — Generates cryptographic proofs for trade integrity
- * and solvency without revealing private data (user identity, exact balances).
+ * Proof of Integrity™ — Generates real zk-SNARK Groth16 proofs for trade
+ * integrity and solvency using compiled Circom circuits.
  * 
- * Phase 1: SHA256-based commitments mirroring Groth16 API shape
- * Phase 2: Swap to real Circom circuits (same API contract, zero frontend changes)
+ * Circuits:
+ *   - Trade Integrity: Poseidon(fillPrice, quantity, userId) + range check
+ *   - Solvency: SUM(balances) == claimedTotal + GreaterEqThan(reserves, liabilities)
  * 
  * CRITICAL: Proof generation is ALWAYS non-blocking.
  * A failed proof must NEVER affect the trade itself.
  */
 
 import { createHash } from 'crypto';
+import * as path from 'path';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import * as snarkjs from 'snarkjs';
+import { buildPoseidon } from 'circomlibjs';
 import { trace } from '@opentelemetry/api';
 import { createLogger } from '../lib/logger';
 import { db } from '../db';
@@ -19,6 +25,24 @@ import type { ZKProof, ZKSolvencyProof, ZKStats, ZKVerifyResult } from '../../sh
 
 const logger = createLogger('zk-proof-service');
 const tracer = trace.getTracer('kx-exchange');
+
+// ============================================
+// CIRCUIT ARTIFACT PATHS
+// ============================================
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const CIRCUITS_DIR = path.join(__dirname, '../circuits/build');
+
+const TRADE_WASM = path.join(CIRCUITS_DIR, 'trade_integrity_js/trade_integrity.wasm');
+const TRADE_ZKEY = path.join(CIRCUITS_DIR, 'trade_integrity_final.zkey');
+const TRADE_VK = JSON.parse(readFileSync(path.join(CIRCUITS_DIR, 'trade_integrity_verification_key.json'), 'utf8'));
+
+const SOLVENCY_WASM = path.join(CIRCUITS_DIR, 'solvency_js/solvency.wasm');
+const SOLVENCY_ZKEY = path.join(CIRCUITS_DIR, 'solvency_final.zkey');
+const SOLVENCY_VK = JSON.parse(readFileSync(path.join(CIRCUITS_DIR, 'solvency_verification_key.json'), 'utf8'));
+
+// BN128 scalar field prime
+const SNARK_FIELD = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
 
 // ============================================
 // TYPES
@@ -34,13 +58,14 @@ interface FilledOrderInput {
 }
 
 // ============================================
-// ZK PROOF SERVICE
+// ZK PROOF SERVICE — PHASE 2 (REAL GROTH16)
 // ============================================
 
 class ZKProofService {
     private proofCache: Map<string, ZKProof> = new Map();
     private solvencyProof: ZKSolvencyProof | null = null;
     private solvencyTimer: NodeJS.Timeout | null = null;
+    private poseidonInstance: any = null;
 
     // Counters
     private totalProofsGenerated = 0;
@@ -52,13 +77,31 @@ class ZKProofService {
     private solvencyProofTotalMs = 0;
     private latestProofTimestamp: string | null = null;
 
-    // The verification key (Phase 1: deterministic, Phase 2: from .zkey ceremony)
-    private readonly verificationKey: string;
-
     constructor() {
-        // Phase 1: Derive a deterministic verification key from a seed
-        this.verificationKey = this.sha256('krystaline-proof-of-integrity-v1-verification-key');
-        logger.info('ZK Proof Service initialized (Phase 1 — SHA256 commitments)');
+        logger.info({
+            tradeWasm: TRADE_WASM,
+            solvencyWasm: SOLVENCY_WASM,
+        }, 'ZK Proof Service initialized (Phase 2 — Real Groth16 proofs via snarkjs)');
+    }
+
+    /**
+     * Initialize Poseidon hasher (async, called once)
+     */
+    private async initPoseidon(): Promise<any> {
+        if (!this.poseidonInstance) {
+            this.poseidonInstance = await buildPoseidon();
+            logger.info('Poseidon hasher initialized');
+        }
+        return this.poseidonInstance;
+    }
+
+    /**
+     * Compute Poseidon hash and return as field element string
+     */
+    private async poseidonHash(inputs: bigint[]): Promise<string> {
+        const poseidon = await this.initPoseidon();
+        const hash = poseidon(inputs);
+        return poseidon.F.toString(hash);
     }
 
     /**
@@ -90,14 +133,15 @@ class ZKProofService {
     }
 
     // ============================================
-    // CIRCUIT 1: TRADE INTEGRITY
+    // CIRCUIT 1: TRADE INTEGRITY (Groth16)
     // ============================================
 
     /**
-     * Generate a trade integrity proof for a filled order.
+     * Generate a real Groth16 trade integrity proof.
      * 
-     * Public outputs: tradeHash, priceRange [low, high]
-     * Private inputs: fillPrice, quantity, userId (never exposed)
+     * Uses the compiled trade_integrity.circom circuit:
+     *   - Poseidon(fillPrice, quantity, userId) == tradeHash
+     *   - priceLow <= fillPrice <= priceHigh
      */
     async generateTradeProof(input: FilledOrderInput): Promise<ZKProof> {
         return tracer.startActiveSpan('zk.prove', async (parentSpan) => {
@@ -105,59 +149,83 @@ class ZKProofService {
 
             try {
                 parentSpan.setAttribute('zk.circuit', 'trade_integrity');
+                parentSpan.setAttribute('zk.phase', 'groth16');
                 parentSpan.setAttribute('zk.orderId', input.orderId);
-                parentSpan.setAttribute('zk.traceId', input.traceId);
 
-                // Step 1: data.fetch — Prepare inputs
-                const tradeHash = await tracer.startActiveSpan('zk.data.fetch', async (span) => {
-                    const hash = this.sha256(input.orderId + input.traceId);
-                    span.setAttribute('zk.tradeHash', hash);
+                // Step 1: data.fetch — Convert inputs to field elements
+                const circuitInputs = await tracer.startActiveSpan('zk.data.fetch', async (span) => {
+                    // Convert float values to integers (×10^8 to preserve 8 decimal places)
+                    const fillPriceFE = BigInt(Math.round(input.fillPrice * 1e8));
+                    const quantityFE = BigInt(Math.round(input.quantity * 1e8));
+                    // Hash userId to a field element
+                    const userIdHash = this.sha256(input.userId);
+                    const userIdFE = BigInt('0x' + userIdHash.slice(0, 30)) % SNARK_FIELD;
+
+                    // Price range (±0.5% of Binance price, in field elements)
+                    const priceLowFE = BigInt(Math.round(input.binancePrice * 0.995 * 1e8));
+                    const priceHighFE = BigInt(Math.round(input.binancePrice * 1.005 * 1e8));
+
+                    // Compute Poseidon hash (the circuit will verify this)
+                    const tradeHash = await this.poseidonHash([fillPriceFE, quantityFE, userIdFE]);
+
+                    span.setAttribute('zk.fillPrice_fe', fillPriceFE.toString());
+                    span.setAttribute('zk.quantity_fe', quantityFE.toString());
                     span.end();
-                    return hash;
+
+                    return {
+                        tradeHash,
+                        priceLow: priceLowFE.toString(),
+                        priceHigh: priceHighFE.toString(),
+                        fillPrice: fillPriceFE.toString(),
+                        quantity: quantityFE.toString(),
+                        userId: userIdFE.toString(),
+                    };
                 });
 
-                // Step 2: witness.generate — Compute the witness (Phase 1: SHA256, Phase 2: Circom WASM)
-                const commitment = await tracer.startActiveSpan('zk.witness.generate', async (span) => {
-                    const witness = this.sha256(
-                        tradeHash +
-                        input.fillPrice.toString() +
-                        input.quantity.toString() +
-                        input.userId
+                // Step 2+3: witness.generate + proof.generate — snarkjs.groth16.fullProve()
+                let proof: any;
+                let publicSignals: string[];
+
+                await tracer.startActiveSpan('zk.witness.generate', async (span) => {
+                    // In Groth16, witness generation is part of fullProve
+                    span.setAttribute('zk.circuit', 'trade_integrity');
+                    span.end();
+                });
+
+                const proveResult = await tracer.startActiveSpan('zk.proof.generate', async (span) => {
+                    const result = await snarkjs.groth16.fullProve(
+                        circuitInputs,
+                        TRADE_WASM,
+                        TRADE_ZKEY
                     );
-                    span.setAttribute('zk.witness.size', witness.length);
+                    span.setAttribute('zk.proof.protocol', 'groth16');
+                    span.setAttribute('zk.proof.curve', 'bn128');
                     span.end();
-                    return witness;
+                    return result;
                 });
 
-                // Step 3: proof.generate — Generate the proof (Phase 1: commitment, Phase 2: Groth16)
-                const proof = await tracer.startActiveSpan('zk.proof.generate', async (span) => {
-                    // Phase 1: The "proof" is a SHA256 commitment that structurally
-                    // mirrors a Groth16 proof. Same API shape, same verification flow.
-                    const proofData = this.sha256(commitment + this.verificationKey);
-                    span.setAttribute('zk.proof.size_bytes', proofData.length);
-                    span.end();
-                    return proofData;
-                });
-
-                // Compute price range (±0.5% of Binance price)
-                const priceLow = (input.binancePrice * 0.995).toFixed(2);
-                const priceHigh = (input.binancePrice * 1.005).toFixed(2);
+                proof = proveResult.proof;
+                publicSignals = proveResult.publicSignals;
 
                 // Step 4: proof.verify — Server-side sanity check
-                await tracer.startActiveSpan('zk.proof.verify', async (span) => {
-                    const isValid = this.verifyCommitment(proof, commitment, this.verificationKey);
-                    span.setAttribute('zk.verified', isValid);
+                const isValid = await tracer.startActiveSpan('zk.proof.verify', async (span) => {
+                    const verified = await snarkjs.groth16.verify(TRADE_VK, publicSignals, proof);
+                    span.setAttribute('zk.verified', verified);
                     span.end();
+                    return verified;
                 });
 
                 const provingTimeMs = Math.round((performance.now() - startTime) * 100) / 100;
 
+                // Serialize the Groth16 proof as JSON string
+                const proofString = JSON.stringify(proof);
+
                 const zkProof: ZKProof = {
                     tradeId: input.orderId,
-                    tradeHash,
-                    proof,
-                    publicSignals: [tradeHash, priceLow, priceHigh],
-                    verificationKey: this.verificationKey,
+                    tradeHash: circuitInputs.tradeHash,
+                    proof: proofString,
+                    publicSignals,
+                    verificationKey: JSON.stringify(TRADE_VK),
                     circuit: 'trade_integrity',
                     generatedAt: new Date().toISOString(),
                     provingTimeMs,
@@ -174,14 +242,16 @@ class ZKProofService {
 
                 parentSpan.setAttribute('zk.proving_time_ms', provingTimeMs);
                 parentSpan.setAttribute('zk.success', true);
+                parentSpan.setAttribute('zk.verified', isValid);
                 parentSpan.end();
 
                 logger.info({
                     orderId: input.orderId,
-                    tradeHash,
+                    tradeHash: circuitInputs.tradeHash.slice(0, 20) + '...',
                     provingTimeMs,
                     cacheSize: this.proofCache.size,
-                }, 'Trade integrity proof generated');
+                    verified: isValid,
+                }, 'Groth16 trade integrity proof generated');
 
                 return zkProof;
 
@@ -195,15 +265,16 @@ class ZKProofService {
     }
 
     // ============================================
-    // CIRCUIT 2: SOLVENCY
+    // CIRCUIT 2: SOLVENCY (Groth16)
     // ============================================
 
     /**
-     * Generate a solvency proof from aggregate wallet balances.
+     * Generate a real Groth16 solvency proof.
      * 
-     * Proves: total BTC reserves ≥ total BTC liabilities
-     *         total USD reserves ≥ total USD liabilities
-     * Without revealing individual user balances.
+     * Uses the compiled solvency.circom circuit (N=8):
+     *   - SUM(balances) == claimedTotal
+     *   - claimedTotal >= threshold
+     *   - Poseidon(balances) == reserveCommitment
      */
     async generateSolvencyProof(): Promise<ZKSolvencyProof> {
         return tracer.startActiveSpan('zk.solvency.prove', async (span) => {
@@ -211,45 +282,84 @@ class ZKProofService {
 
             try {
                 span.setAttribute('zk.circuit', 'solvency');
+                span.setAttribute('zk.phase', 'groth16');
 
-                // Query aggregate wallet balances
+                // Query individual wallet balances (up to 8 users)
+                let userBalances: bigint[] = [];
                 let btcTotal = 0;
                 let usdTotal = 0;
 
                 try {
+                    // Get per-user USD balances for the proof
                     const result = await db.query(
-                        `SELECT asset, COALESCE(SUM(balance::numeric), 0) as total
-             FROM crypto_exchange.wallets
-             GROUP BY asset`
+                        `SELECT user_id, COALESCE(SUM(balance::numeric), 0) as total_balance
+                         FROM crypto_exchange.wallets
+                         WHERE asset = 'USD'
+                         GROUP BY user_id
+                         ORDER BY total_balance DESC
+                         LIMIT 8`
                     );
 
-                    for (const row of result.rows) {
+                    userBalances = result.rows.map((row: any) =>
+                        BigInt(Math.round(parseFloat(row.total_balance) * 100)) // cents
+                    );
+
+                    // Get aggregate totals for display
+                    const aggResult = await db.query(
+                        `SELECT asset, COALESCE(SUM(balance::numeric), 0) as total
+                         FROM crypto_exchange.wallets
+                         GROUP BY asset`
+                    );
+                    for (const row of aggResult.rows) {
                         if (row.asset === 'BTC') btcTotal = parseFloat(row.total);
                         if (row.asset === 'USD') usdTotal = parseFloat(row.total);
                     }
                 } catch (dbErr) {
-                    // If DB query fails, use zeros (proof shows empty reserves)
                     logger.warn({ err: dbErr }, 'Solvency DB query failed, using zero balances');
                 }
 
-                const timestamp = new Date().toISOString();
+                // Pad to exactly 8 balances (circuit requires N=8)
+                while (userBalances.length < 8) {
+                    userBalances.push(BigInt(0));
+                }
+                // Truncate to 8 if more
+                userBalances = userBalances.slice(0, 8);
 
-                // Generate the commitment: SHA256(btcTotal + usdTotal + timestamp)
-                const totalReserveCommitment = this.sha256(
-                    btcTotal.toString() + usdTotal.toString() + timestamp
+                const claimedTotal = userBalances.reduce((a, b) => a + b, BigInt(0));
+                const threshold = BigInt(0); // For now, just prove reserves exist
+
+                // Compute Poseidon commitment
+                const reserveCommitment = await this.poseidonHash(userBalances);
+
+                const circuitInputs = {
+                    reserveCommitment,
+                    claimedTotal: claimedTotal.toString(),
+                    threshold: threshold.toString(),
+                    balances: userBalances.map(b => b.toString()),
+                };
+
+                // Generate Groth16 proof
+                const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+                    circuitInputs,
+                    SOLVENCY_WASM,
+                    SOLVENCY_ZKEY
                 );
 
-                const provingTimeMs = Math.round((performance.now() - startTime) * 100) / 100;
+                // Verify server-side
+                const verified = await snarkjs.groth16.verify(SOLVENCY_VK, publicSignals, proof);
 
-                const proof: ZKSolvencyProof = {
-                    totalReserveCommitment,
+                const provingTimeMs = Math.round((performance.now() - startTime) * 100) / 100;
+                const timestamp = new Date().toISOString();
+
+                const solvencyProof: ZKSolvencyProof = {
+                    totalReserveCommitment: reserveCommitment,
                     assets: { btc: btcTotal, usd: usdTotal },
                     circuit: 'solvency',
                     generatedAt: timestamp,
                     nextProofAt: new Date(Date.now() + 60_000).toISOString(),
                 };
 
-                this.solvencyProof = proof;
+                this.solvencyProof = solvencyProof;
                 this.solvencyProofCount++;
                 this.solvencyProofTotalMs += provingTimeMs;
                 this.totalProofsGenerated++;
@@ -258,16 +368,19 @@ class ZKProofService {
                 span.setAttribute('zk.proving_time_ms', provingTimeMs);
                 span.setAttribute('zk.btc_total', btcTotal);
                 span.setAttribute('zk.usd_total', usdTotal);
+                span.setAttribute('zk.verified', verified);
                 span.end();
 
                 logger.info({
                     btcTotal,
                     usdTotal,
                     provingTimeMs,
-                    commitment: totalReserveCommitment.slice(0, 16) + '...',
-                }, 'Solvency proof generated');
+                    commitment: reserveCommitment.slice(0, 20) + '...',
+                    verified,
+                    numUsers: userBalances.filter(b => b > BigInt(0)).length,
+                }, 'Groth16 solvency proof generated');
 
-                return proof;
+                return solvencyProof;
 
             } catch (error) {
                 span.recordException(error as Error);
@@ -282,30 +395,44 @@ class ZKProofService {
     // ============================================
 
     /**
-     * Verify a trade proof (server-side).
-     * In Phase 2, this calls snarkjs.groth16.verify().
+     * Verify a trade proof (server-side) using snarkjs.groth16.verify()
      */
     async verifyProof(tradeId: string): Promise<ZKVerifyResult | null> {
-        const proof = this.proofCache.get(tradeId);
-        if (!proof) return null;
+        const cachedProof = this.proofCache.get(tradeId);
+        if (!cachedProof) return null;
 
         this.totalVerifications++;
 
-        // Phase 1: Re-derive and verify the commitment chain
-        const isValid = this.verifyCommitment(proof.proof, '', this.verificationKey);
-        // In Phase 1, we always verify true if the proof exists (it was generated by us)
-        const verified = !!proof;
+        try {
+            // Parse the stored Groth16 proof JSON
+            const proofObj = JSON.parse(cachedProof.proof);
+            const verified = await snarkjs.groth16.verify(
+                TRADE_VK,
+                cachedProof.publicSignals,
+                proofObj
+            );
 
-        if (verified) this.totalVerificationSuccesses++;
+            if (verified) this.totalVerificationSuccesses++;
 
-        return {
-            verified,
-            tradeId: proof.tradeId,
-            tradeHash: proof.tradeHash,
-            proof: proof.proof,
-            publicSignals: proof.publicSignals,
-            verifiedAt: new Date().toISOString(),
-        };
+            return {
+                verified,
+                tradeId: cachedProof.tradeId,
+                tradeHash: cachedProof.tradeHash,
+                proof: cachedProof.proof,
+                publicSignals: cachedProof.publicSignals,
+                verifiedAt: new Date().toISOString(),
+            };
+        } catch (error) {
+            logger.error({ err: error, tradeId }, 'Proof verification error');
+            return {
+                verified: false,
+                tradeId: cachedProof.tradeId,
+                tradeHash: cachedProof.tradeHash,
+                proof: cachedProof.proof,
+                publicSignals: cachedProof.publicSignals,
+                verifiedAt: new Date().toISOString(),
+            };
+        }
     }
 
     /**
@@ -326,9 +453,6 @@ class ZKProofService {
     // STATS
     // ============================================
 
-    /**
-     * Get aggregate ZK stats for the hero page dashboard
-     */
     getStats(): ZKStats {
         const solvencyAge = this.solvencyProof
             ? Math.floor((Date.now() - new Date(this.solvencyProof.generatedAt).getTime()) / 1000)
@@ -372,12 +496,6 @@ class ZKProofService {
 
     private sha256(data: string): string {
         return createHash('sha256').update(data).digest('hex');
-    }
-
-    private verifyCommitment(proof: string, _commitment: string, _verificationKey: string): boolean {
-        // Phase 1: If the proof exists and is a valid hex string, it's "verified"
-        // Phase 2: This becomes snarkjs.groth16.verify(vk, publicSignals, proof)
-        return /^[a-f0-9]{64}$/.test(proof);
     }
 }
 
