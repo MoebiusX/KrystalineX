@@ -35,6 +35,8 @@ interface ProofResult {
     proof: string;
     publicSignals: string[];
     verifiedAt: string;
+    timestamp: string;
+    traceId: string;
 }
 
 type ActivityType = 'all' | 'trades' | 'transfers';

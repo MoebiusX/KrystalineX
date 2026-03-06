@@ -89,7 +89,8 @@ through RabbitMQ headers so the full path of a trade can be reconstructed.
 ## Key features
 
 ### 🔄 Trading & wallet
-- BTC/USD spot market with **live Binance WebSocket price feed**
+- BTC/USD spot market powered by **real‑time Binance WebSocket price feed**
+  (`wss://stream.binance.com:9443/ws` — live market data, not simulated)
 - BUY/SELL orders with fill price, slippage, and fair‑band logic
 - Multi‑user wallet service (`kx-wallet`) with `kx1`‑style addresses and balance
   validation
