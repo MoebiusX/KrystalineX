@@ -6,9 +6,9 @@ matcher's trade decision — is captured in an end-to-end distributed trace, fed
 statistical anomaly engine, and — when something looks wrong — analyzed by a fine‑tuned
 LLM that explains **what went wrong and how to fix it**.
 
-> **Why it exists**Vz
+> **Why it exists**
 > *Demonstrate how modern observability, AI, and cryptography can be combined to build
-> transparent, auditable, and self‑diagnosing infrastructure.*
+> transparent, auditable, and self‑diagnosing infrastructure.*  
 
 - 4 micro‑services with **17+ spans per trace** and full W3C context propagation over
   RabbitMQ
