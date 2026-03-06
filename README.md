@@ -1,103 +1,174 @@
-# Krystaline Exchange - AI-Powered Observability Platform
+# KrystalineX – Institutional-Grade Crypto Exchange & Observability Demo Platform
 
-Institutional-grade crypto exchange platform with OTEL tracing, anomaly detection, and AI-driven diagnostics.
+KrystalineX is an **institutional-grade cryptocurrency exchange** engineered around a
+“Proof of Observability™” philosophy. Every action, from the browser's click to a
+matcher’s trade decision, is captured in an end-to-end distributed trace, fed into a
+statistical anomaly engine, and — when something looks wrong — analyzed by a fine‑tuned
+LLM that explains **what went wrong and how to fix it**.
 
-An **institutional-grade cryptocurrency exchange platform** that uses **Statistical Anomaly Detection + LLMs to extract maximum value from observability signals**. Combines OpenTelemetry distributed tracing, adaptive anomaly detection, and AI-powered analysis to automatically identify, diagnose, and explain performance issues.
+> **Why it exists**
+> *Demonstrate how modern observability, AI, and cryptography can be combined to build
+> transparent, auditable, and self‑diagnosing infrastructure.*
 
-**License:** Apache-2.0
+- 4 micro‑services with **17+ spans per trace** and full context propagation over
+  RabbitMQ
+- Automated **latency & amount anomaly detection** using Welford’s online algorithm
+- **AI‑powered root‑cause analysis** via a LoRA‑tuned Llama 3.2:1B model (hosted by Ollama)
+- **Zero‑knowledge proofs** (zk‑SNARKs) for tamper‑proof trade commitments and solvency
+- Comprehensive telemetry: OpenTelemetry → Jaeger, Prometheus, Loki, Grafana
+- 940+ automated tests; production‑grade Docker‑Compose & Kubernetes manifests
 
-## Quick Start
+**License:** Apache‑2.0
 
-```bash
-# Start all services
+---
+
+## Quick start
+
+```powershell
+# build & launch entire stack (dev mode)
 npm run dev
 
-# Clean restart (kills all processes, restarts Docker + app)
+# clean restart (kills containers, re‑init)
 scripts\restart.bat
 ```
 
-**Open**: http://localhost:5173
+Browse to ➜ <http://localhost:5173>
 
-## What This Demo Shows
+> For production-like deployment see `k8s/manifests` and the [architecture docs](docs/architecture).
 
-### Full Distributed Trace (17 spans)
-```
-kx-wallet: order.submit.client             ← Browser starts trade
-├── kx-wallet: HTTP POST                   ← Fetch request
-│   └── api-gateway: kong                  ← Kong Gateway (routes + plugins)
-│       └── api-gateway: kong.balancer
-│           └── kx-exchange: POST          ← Exchange API handler
-│               ├── kx-exchange: publish orders      ← RabbitMQ publish
-│               │   └── kx-exchange: publish <default>
-│               │       └── kx-matcher: order.match  ← Consumer processes
-│               │           └── kx-matcher: order.response
-│               └── kx-exchange: payment_response process  ← Response received
-└── kx-wallet: order.response.received     ← Browser receives FILLED
-```
+---
 
-### Multi-User Transfers
-```
-kx-wallet: transfer.submit.client          ← Browser starts transfer
-├── kx-wallet: HTTP POST                   ← Fetch request
-│   └── api-gateway: kong → kx-exchange: btc.transfer
-└── kx-wallet: transfer.response.received
+## High‑level architecture
+
+```text
+  [Browser kx-wallet]                         [Jaeger]   [Prometheus]
+        ↓ HTTP
+     [Kong API Gateway] ──┐
+          ↓ OTEL          │      [Loki]     [Grafana]    [Alertmanager]
+   [kx-exchange API]      ├─> [rabbitmq] ─> [kx-matcher] ─┐
+   (orders, auth, wallet) │                             │
+        ↳ Postgres        │                             ↓
+                          └─> trace/metric/log correlator ─> anomaly detector ─> LLM analyzer
+                                                          └─> alerting rules → GoAlert/ntfy
 ```
 
-### Services & OTEL Names
+All components emit OpenTelemetry spans and metrics; traces carry W3C context
+through RabbitMQ headers so the full path of a trade can be reconstructed.
 
-| Service | URL | OTEL Service Name |
-|---------|-----|-------------------|
-| Krystaline Wallet (Browser) | http://localhost:5173 | `kx-wallet` |
-| Krystaline Exchange API (Server) | http://localhost:5000 | `kx-exchange` |
-| Krystaline Matcher (Processor) | RabbitMQ consumer | `kx-matcher` |
-| Kong Gateway | http://localhost:8000 | `api-gateway` |
-| Jaeger UI | http://localhost:16686 | - |
-| RabbitMQ | http://localhost:15672 | - |
-| Prometheus | http://localhost:9090 | - |
+---
 
-### Metrics Endpoints
+## Key features
 
-| Metric Source | URL | Description |
-|---------------|-----|-------------|
-| Exchange API | http://localhost:5000/metrics | Application metrics (requests, orders, latency) |
-| RabbitMQ | http://localhost:15692/metrics | Queue depth, message rates, connections |
-| PostgreSQL (App) | http://localhost:9187/metrics | Database connections, query stats |
-| PostgreSQL (Kong) | http://localhost:9188/metrics | Kong database metrics |
-| Node Exporter | http://localhost:9100/metrics | OS metrics (CPU, memory, disk, network) |
+### 🔄 Trading & wallet
+- BTC/USD spot market (simulated Binance WebSocket price feed)
+- BUY/SELL orders with fill price, slippage and fair‑band logic
+- Multi‑user wallet service (`kx-wallet`) with kx1‑style addresses and balance
+  validation
+- Peer‑to‑peer transfers between users (transfer page, `/api/transfers`)
 
-## Architecture
+### 🔐 Authentication
+- Email registration/verification (MailDev for local)
+- JWT access + refresh tokens, secure logout, session management
+- Optional TOTP‑based two‑factor authentication
 
+### 🧠 AI‑Powered analysis
+- LoRA‑fine‑tuned Llama 3.2:1B model (see `axolotl-config.yaml`) analyzes
+  anomalies in natural language
+- Training data collected from human feedback (`training-data*.jsonl`)
+- Outputs structured diagnoses with SUMMARY / CAUSES / RECOMMENDATIONS / CONFIDENCE
+- Model hosted locally via Ollama; inference API used by `/api/monitor/anomalies`
+
+### ⚠️ Monitoring & anomaly detection
+- **Latency anomalies** – trace duration baselines adaptively maintained with
+  Welford's algorithm (SEV1–SEV5)
+- **Amount anomalies** (“whale alerts”) with 6‑order‑of‑magnitude sensitivity
+  (enable with `ENABLE_AMOUNT_ANOMALY_DETECTION=true`);
+  passive whale logs and `/api/monitor/amount-anomalies`
+- 34+ alerting rules, escalation via SMS, voice, GoAlert, ntfy
+- Health endpoint `/api/monitor/health` for liveness checks
+
+### 🔐 Zero‑knowledge proofs
+- Circom circuits prove trade integrity: price, quantity, user ID, timestamp,
+  trace ID (see `zk-SNARK/` and `lora-anomaly-analyzer`)
+- Solvency proofs demonstrate that on‑chain balances exceed liabilities
+- Proofs generated by `snarkjs` during order execution, stored with events
+
+### 🛠️ Developer tooling & testing
+- 940+ unit/E2E tests (Vitest + Playwright)
+- `npm run test:e2e` exercises trading and transfer flows
+- Docker‑Compose orchestration plus Kubernetes manifests for production
+- Scripts for datasets, docs, security audits, and synthetic training data
+
+---
+
+## API reference
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/auth/register` | POST | register new user |
+| `/api/auth/login` | POST | login w/ credentials |
+| `/api/auth/verify` | POST | verify email code |
+| `/api/wallet` | GET | current user wallet |
+| `/api/orders` | POST | submit trade order |
+| `/api/orders` | GET | list user orders |
+| `/api/transfers` | POST | send crypto to another user |
+| `/api/price` | GET | current BTC price |
+| `/api/monitor/health` | GET | system health |
+| `/api/monitor/anomalies` | GET | active trace anomalies |
+| `/api/monitor/amount-anomalies` | GET | active whale alerts |
+
+Metrics available under `/metrics` for Prometheus scraping (exchange API,
+RabbitMQ, PostgreSQL, Kong, Node exporter, etc.).
+
+---
+
+## Running & testing
+
+### Manual testing (dev)
+1. Start stack with `npm run dev`.
+2. Register/login via UI; verify email at <http://localhost:1080>.
+3. Place orders or perform transfers; watch Jaeger (<http://localhost:16686>)
+   and Grafana dashboards.
+4. Trigger anomalies by throttling responses or submitting extreme amounts.
+
+### Automated tests
+```bash
+npm run test:e2e      # end‑to‑end
+npm run test:unit     # unit tests
 ```
-Browser (kx-wallet)
-    ↓ HTTP POST /api/orders (or /api/transfer)
-Kong Gateway (api-gateway)
-    ↓
-Krystaline Exchange API (kx-exchange)
-    ↓ RabbitMQ publish (with trace context)
-Order Matcher (order-matcher)
-    ↓ Execute trade
-    ↓ RabbitMQ response (with parent context)
-Exchange API (update wallet)
-    ↓
-Browser (order.response.received)
-```
 
-## Features
+---
 
-### Trading
-- **Dark themed** crypto trading UI
-- **BTC/USD trading** with simulated price (~$42K range)
-- **BUY/SELL orders** with fill price and slippage
-- **Real-time wallet** balance updates
+## Technical stack
 
-### Authentication
-- **Email-based registration** with verification codes
-- **JWT authentication** with refresh tokens
-- **Session management** with secure logout
-- **Optional 2FA** with TOTP support
+- **Frontend**: React 18 + TypeScript, Vite, TailwindCSS, Radix UI, Wouter
+- **Backend**: Node.js, Express, TypeScript, Drizzle ORM, PostgreSQL
+- **Messaging**: RabbitMQ (W3C trace context propagation)
+- **Gateway**: Kong with OpenTelemetry plugin
+- **Observability**: OTEL SDK (browser & Node), Jaeger, Prometheus, Loki,
+  Grafana, Alertmanager, GoAlert
+- **AI/ML**: Llama 3.2:1B, Ollama, Axolotl/LoRA, training data in `training-data*.jsonl`
+- **Crypto**: Circom, snarkjs, zk‑SNARK circuits under `zk-SNARK/`
+- **Testing**: Vitest, Playwright
+- **Infrastructure**: Docker‑Compose, Kubernetes manifests, Bicep/TF (future)
 
-### Tracing
-- **17 spans** for order flow
+---
+
+## Scripts snapshot
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | launch full dev environment |
+| `scripts\restart.bat` | clean restart of containers + services |
+| `npm run build` | build frontend for production |
+| `npm run test:e2e` | run end‑to‑end tests |
+| `npm run docs` | build project documentation |
+
+---
+
+For detailed operational guidelines, see the `docs/` directory or the whitepapers
+in `docs/OBSERVABILITY_WHITEPAPER.md` and `docs/MLOps for AIOps.md`.
+
 - **4 services** in distributed trace
 - **Context propagation** through RabbitMQ
 - **Client-side spans** showing response processing
