@@ -37,7 +37,6 @@ secrets/
 *.key
 
 # Confidential documentation (whitepaper, screenshots, zip bundles)
-docs/OBSERVABILITY_WHITEPAPER.md
 docs/OBSERVABILITY_ADOPTION_GUIDE.md
 docs/OBSERVABILITY_MATHEMATICS.md
 docs/images/
