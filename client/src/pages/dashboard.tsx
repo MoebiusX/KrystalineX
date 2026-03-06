@@ -329,12 +329,12 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
 
             {/* Left Column - Trade/Transfer */}
-            <div className="space-y-6">
+            <div className="flex flex-col">
               {/* Trade/Transfer Card with integrated tabs */}
-              <Card className="bg-slate-900 border-slate-700">
+              <Card className="bg-slate-900 border-slate-700 flex-1 flex flex-col">
                 {/* Tab Header */}
                 <div className="flex border-b border-slate-700">
                   <button
@@ -360,7 +360,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Active Form Content */}
-                <div className="p-0">
+                <div className="p-0 flex-1 flex flex-col">
                   {!currentUser ? (
                     <div className="p-8">
                       <Skeleton className="h-32 w-full bg-slate-800" />
