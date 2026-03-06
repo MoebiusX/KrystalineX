@@ -430,12 +430,28 @@ export default function Activity() {
                                                                         </code>
                                                                     </div>
                                                                 )}
+                                                                {proofData.publicSignals?.[3] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Timestamp (epoch ms)</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
+                                                                            {proofData.publicSignals[3]}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                                {proofData.publicSignals?.[4] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Trace ID (field element)</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
+                                                                            {proofData.publicSignals[4]}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             <span className="text-slate-500">Verified:</span>
                                                             <span className="text-emerald-400">{new Date(proofData.verifiedAt).toLocaleString()}</span>
                                                         </div>
                                                         <p className="text-slate-500 mt-2 pt-2 border-t border-slate-800">
-                                                            Poseidon(fillPrice, quantity, userId) commitment matches on-chain proof.
+                                                            Poseidon(fillPrice, quantity, userId, timestamp, traceId) commitment verified.
                                                             Anyone can independently verify using snarkjs + the public verification key.
                                                         </p>
                                                     </div>

@@ -469,6 +469,22 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
                                                             </code>
                                                         </div>
                                                     )}
+                                                    {zkVerifyState.data.publicSignals?.[3] && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Timestamp (epoch ms)</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
+                                                                {zkVerifyState.data.publicSignals[3]}
+                                                            </code>
+                                                        </div>
+                                                    )}
+                                                    {zkVerifyState.data.publicSignals?.[4] && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Trace ID (field element)</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
+                                                                {zkVerifyState.data.publicSignals[4]}
+                                                            </code>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

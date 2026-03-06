@@ -147,8 +147,8 @@ class ZKProofService {
     /**
      * Generate a real Groth16 trade integrity proof.
      * 
-     * Uses the compiled trade_integrity.circom circuit:
-     *   - Poseidon(fillPrice, quantity, userId) == tradeHash
+     * Uses the compiled trade_integrity.circom circuit (v2 — Phase 3):
+     *   - Poseidon(fillPrice, quantity, userId, timestamp, traceId) == tradeHash
      *   - priceLow <= fillPrice <= priceHigh
      */
     async generateTradeProof(input: FilledOrderInput): Promise<ZKProof> {
@@ -169,15 +169,24 @@ class ZKProofService {
                     const userIdHash = this.sha256(input.userId);
                     const userIdFE = BigInt('0x' + userIdHash.slice(0, 30)) % SNARK_FIELD;
 
+                    // Phase 3: timestamp as Unix epoch milliseconds
+                    const timestampFE = BigInt(Date.now());
+
+                    // Phase 3: traceId (128-bit hex) as field element
+                    const traceIdClean = input.traceId.replace(/-/g, '').slice(0, 32);
+                    const traceIdFE = BigInt('0x' + (traceIdClean || '0')) % SNARK_FIELD;
+
                     // Price range (±0.5% of Binance price, in field elements)
                     const priceLowFE = BigInt(Math.round(input.binancePrice * 0.995 * 1e8));
                     const priceHighFE = BigInt(Math.round(input.binancePrice * 1.005 * 1e8));
 
-                    // Compute Poseidon hash (the circuit will verify this)
-                    const tradeHash = await this.poseidonHash([fillPriceFE, quantityFE, userIdFE]);
+                    // Compute Poseidon hash with 5 inputs (the circuit will verify this)
+                    const tradeHash = await this.poseidonHash([fillPriceFE, quantityFE, userIdFE, timestampFE, traceIdFE]);
 
                     span.setAttribute('zk.fillPrice_fe', fillPriceFE.toString());
                     span.setAttribute('zk.quantity_fe', quantityFE.toString());
+                    span.setAttribute('zk.timestamp_fe', timestampFE.toString());
+                    span.setAttribute('zk.traceId_fe', traceIdFE.toString());
                     span.end();
 
                     return {
@@ -187,6 +196,8 @@ class ZKProofService {
                         fillPrice: fillPriceFE.toString(),
                         quantity: quantityFE.toString(),
                         userId: userIdFE.toString(),
+                        timestamp: timestampFE.toString(),
+                        traceId: traceIdFE.toString(),
                     };
                 });
 
