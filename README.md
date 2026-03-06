@@ -1,4 +1,4 @@
-# KrystalineX – Institutional-Grade Crypto Exchange & Observability Platform
+# KrystalineX – Institutional-Grade Crypto Exchange & Observability Demo Platform
 
 KrystalineX is an **institutional-grade cryptocurrency exchange** engineered around a
 "Proof of Observability™" philosophy. Every action — from the browser's click to a
@@ -6,7 +6,7 @@ matcher's trade decision — is captured in an end-to-end distributed trace, fed
 statistical anomaly engine, and — when something looks wrong — analyzed by a fine‑tuned
 LLM that explains **what went wrong and how to fix it**.
 
-> **Why it exists**
+> **Why it exists**Vz
 > *Demonstrate how modern observability, AI, and cryptography can be combined to build
 > transparent, auditable, and self‑diagnosing infrastructure.*
 
@@ -89,7 +89,8 @@ through RabbitMQ headers so the full path of a trade can be reconstructed.
 ## Key features
 
 ### 🔄 Trading & wallet
-- BTC/USD spot market with **live Binance WebSocket price feed**
+- BTC/USD spot market powered by **real‑time Binance WebSocket price feed**
+  (`wss://stream.binance.com:9443/ws` — live market data, not simulated)
 - BUY/SELL orders with fill price, slippage, and fair‑band logic
 - Multi‑user wallet service (`kx-wallet`) with `kx1`‑style addresses and balance
   validation
