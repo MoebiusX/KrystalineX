@@ -35,11 +35,19 @@ const CIRCUITS_DIR = path.join(__dirname, '../circuits/build');
 
 const TRADE_WASM = path.join(CIRCUITS_DIR, 'trade_integrity_js/trade_integrity.wasm');
 const TRADE_ZKEY = path.join(CIRCUITS_DIR, 'trade_integrity_final.zkey');
-const TRADE_VK = JSON.parse(readFileSync(path.join(CIRCUITS_DIR, 'trade_integrity_verification_key.json'), 'utf8'));
-
 const SOLVENCY_WASM = path.join(CIRCUITS_DIR, 'solvency_js/solvency.wasm');
 const SOLVENCY_ZKEY = path.join(CIRCUITS_DIR, 'solvency_final.zkey');
-const SOLVENCY_VK = JSON.parse(readFileSync(path.join(CIRCUITS_DIR, 'solvency_verification_key.json'), 'utf8'));
+
+// Load verification keys gracefully (may not exist in test environment)
+let TRADE_VK: any = null;
+let SOLVENCY_VK: any = null;
+try {
+    TRADE_VK = JSON.parse(readFileSync(path.join(CIRCUITS_DIR, 'trade_integrity_verification_key.json'), 'utf8'));
+    SOLVENCY_VK = JSON.parse(readFileSync(path.join(CIRCUITS_DIR, 'solvency_verification_key.json'), 'utf8'));
+} catch {
+    // Circuit artifacts not present (test environment or first build)
+    logger.warn('Circuit verification keys not found — running in mock mode');
+}
 
 // BN128 scalar field prime
 const SNARK_FIELD = BigInt('21888242871839275222246405745257275088548364400416034343698204186575808495617');
@@ -293,7 +301,7 @@ class ZKProofService {
                     // Get per-user USD balances for the proof
                     const result = await db.query(
                         `SELECT user_id, COALESCE(SUM(balance::numeric), 0) as total_balance
-                         FROM crypto_exchange.wallets
+                         FROM wallets
                          WHERE asset = 'USD'
                          GROUP BY user_id
                          ORDER BY total_balance DESC
@@ -307,7 +315,7 @@ class ZKProofService {
                     // Get aggregate totals for display
                     const aggResult = await db.query(
                         `SELECT asset, COALESCE(SUM(balance::numeric), 0) as total
-                         FROM crypto_exchange.wallets
+                         FROM wallets
                          GROUP BY asset`
                     );
                     for (const row of aggResult.rows) {
