@@ -443,13 +443,32 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
                                                 <span className="text-slate-300 font-mono text-[11px]">trade_integrity (BN128)</span>
                                                 <span className="text-slate-500">Hash:</span>
                                                 <code className="text-purple-300 font-mono bg-slate-800/50 px-1 rounded text-[11px] break-all">{zkVerifyState.data.tradeHash}</code>
-                                                <span className="text-slate-500">Signals:</span>
-                                                <div className="space-y-0.5">
-                                                    {zkVerifyState.data.publicSignals?.slice(0, 3).map((s, i) => (
-                                                        <code key={i} className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px] break-all">
-                                                            [{i}] {s.length > 20 ? s.slice(0, 10) + '…' + s.slice(-10) : s}
-                                                        </code>
-                                                    ))}
+                                                <span className="text-slate-500">Public Inputs:</span>
+                                                <div className="space-y-1">
+                                                    {zkVerifyState.data.publicSignals?.[0] && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Commitment Hash</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px] break-all">
+                                                                {zkVerifyState.data.publicSignals[0].length > 20 ? zkVerifyState.data.publicSignals[0].slice(0, 10) + '…' + zkVerifyState.data.publicSignals[0].slice(-10) : zkVerifyState.data.publicSignals[0]}
+                                                            </code>
+                                                        </div>
+                                                    )}
+                                                    {zkVerifyState.data.publicSignals?.[1] && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Fill Price (field element)</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
+                                                                {zkVerifyState.data.publicSignals[1]}
+                                                            </code>
+                                                        </div>
+                                                    )}
+                                                    {zkVerifyState.data.publicSignals?.[2] && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Quantity (field element)</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
+                                                                {zkVerifyState.data.publicSignals[2]}
+                                                            </code>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
