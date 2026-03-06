@@ -7,7 +7,7 @@ import { TradeForm } from "@/components/trade-form";
 import { TransferForm } from "@/components/transfer-form";
 import { TraceViewer } from "@/components/trace-viewer";
 import { formatTimeAgo } from "@/lib/utils";
-import { Bitcoin, TrendingUp, Wallet, ArrowUpRight, ArrowDownRight, Send, ArrowRightLeft, Sparkles, X, CheckCircle2, Eye, Zap, DollarSign, CreditCard, RefreshCw, Lock, CheckCircle } from "lucide-react";
+import { Bitcoin, TrendingUp, Wallet, ArrowUpRight, ArrowDownRight, Send, ArrowRightLeft, Sparkles, X, CheckCircle2, Eye, Zap, DollarSign, CreditCard, RefreshCw } from "lucide-react";
 import type { Order, Transfer } from "@shared/schema";
 import Layout from "@/components/Layout";
 import { useLocation, useSearch } from "wouter";
@@ -81,9 +81,7 @@ export default function Dashboard() {
   const [showWelcome, setShowWelcome] = useState(false);
   const [hasCompletedFirstTrade, setHasCompletedFirstTrade] = useState(false);
   const [hasViewedTrace, setHasViewedTrace] = useState(false);
-  const [verifyingTrade, setVerifyingTrade] = useState<string | null>(null);
-  const [verifiedTrades, setVerifiedTrades] = useState<Set<string>>(new Set());
-  const [pendingTrades, setPendingTrades] = useState<Set<string>>(new Set());
+
 
   // Get current user from localStorage
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -487,156 +485,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Recent Activity — Full Width Below Grid */}
-          <Card className="bg-slate-900 border-slate-700 mt-6">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-green-400" />
-                Recent Activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {(ordersLoading || transfersLoading) ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {[...Array(4)].map((_, i) => (
-                    <Skeleton key={i} className="h-16 w-full bg-slate-800" />
-                  ))}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Orders */}
-                  {orders?.slice(0, 6).map((order) => (
-                    <div
-                      key={order.orderId}
-                      className="flex items-center justify-between p-3 bg-slate-800 rounded-lg group hover:bg-slate-750 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        {order.side === 'BUY' ? (
-                          <ArrowUpRight className="w-5 h-5 text-green-400" />
-                        ) : (
-                          <ArrowDownRight className="w-5 h-5 text-red-400" />
-                        )}
-                        <div>
-                          <p className={`font-medium ${order.side === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
-                            {order.side} {order.quantity?.toFixed(6)} BTC
-                          </p>
-                          <p className="text-sm text-slate-400">
-                            {formatTimeAgo(new Date(order.createdAt))}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="text-right">
-                          <p className="text-sm font-mono text-slate-300">
-                            ${order.fillPrice?.toLocaleString() || 'Market'}
-                          </p>
-                          <p className={`text-sm font-medium ${getStatusColor(order.status, order.side)}`}>
-                            {order.status}
-                          </p>
-                        </div>
-                        {order.traceId && (
-                          <a
-                            href={getJaegerTraceUrl(order.traceId)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg text-purple-400 hover:text-purple-300 transition-colors opacity-0 group-hover:opacity-100"
-                            title="View trace in Jaeger"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </a>
-                        )}
-                        {/* ZK Proof Verify Button */}
-                        {order.status === 'FILLED' && (
-                          verifiedTrades.has(order.orderId) ? (
-                            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                              <CheckCircle className="w-3 h-3" />
-                              Verified
-                            </span>
-                          ) : (
-                            <button
-                              className={`flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-all disabled:opacity-50 ${pendingTrades.has(order.orderId)
-                                ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
-                                : 'bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 hover:text-purple-200'
-                                }`}
-                              disabled={verifyingTrade === order.orderId}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                setVerifyingTrade(order.orderId);
-                                try {
-                                  const res = await fetch(`/api/v1/public/zk/verify/${order.orderId}`);
-                                  if (res.ok) {
-                                    const result = await res.json();
-                                    if (result.verified) {
-                                      setVerifiedTrades(prev => new Set(prev).add(order.orderId));
-                                    } else {
-                                      setPendingTrades(prev => new Set(prev).add(order.orderId));
-                                    }
-                                  } else {
-                                    setPendingTrades(prev => new Set(prev).add(order.orderId));
-                                  }
-                                } catch {
-                                  setPendingTrades(prev => new Set(prev).add(order.orderId));
-                                } finally {
-                                  setVerifyingTrade(null);
-                                }
-                              }}
-                            >
-                              <Lock className="w-3 h-3" />
-                              {verifyingTrade === order.orderId ? '...' : pendingTrades.has(order.orderId) ? 'Pending' : 'Verify'}
-                            </button>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Transfers */}
-                  {transfers?.slice(0, 2).map((transfer) => (
-                    <div
-                      key={transfer.transferId}
-                      className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border-l-2 border-purple-500"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Send className="w-5 h-5 text-purple-400" />
-                        <div>
-                          <p className="font-medium text-purple-400">
-                            Transfer {transfer.amount?.toFixed(6)} BTC
-                          </p>
-                          <p className="text-sm text-slate-400">
-                            {transfer.fromUserId} → {transfer.toUserId}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className={`text-sm font-medium ${getStatusColor(transfer.status)}`}>
-                          {transfer.status}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-
-                  {(!orders?.length && !transfers?.length) && (
-                    <div className="col-span-full text-center py-10">
-                      <div className="relative inline-block mb-4">
-                        <Wallet className="w-12 h-12 text-cyan-500/40" />
-                        <div className="absolute inset-0 animate-ping">
-                          <Wallet className="w-12 h-12 text-cyan-500/20" />
-                        </div>
-                      </div>
-                      <p className="text-lg font-medium text-slate-300 mb-1">Ready to Start Trading</p>
-                      <p className="text-sm text-slate-500 mb-4 max-w-xs mx-auto">
-                        Make your first trade above. Each transaction is traced with OpenTelemetry.
-                      </p>
-                      <div className="flex items-center justify-center gap-2 text-xs text-purple-400/60">
-                        <Eye className="w-3 h-3" />
-                        <span>Traces will appear in real-time</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </main>
       </div>
     </Layout>

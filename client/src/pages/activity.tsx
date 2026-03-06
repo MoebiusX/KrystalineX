@@ -15,7 +15,9 @@ import {
     CheckCircle2,
     XCircle,
     Filter,
-    RefreshCw
+    RefreshCw,
+    Lock,
+    CheckCircle
 } from "lucide-react";
 import type { Order, Transfer } from "@shared/schema";
 import { getJaegerTraceUrl } from "@/lib/trace-utils";
@@ -34,6 +36,9 @@ export default function Activity() {
     const [user, setUser] = useState<User | null>(null);
     const [filter, setFilter] = useState<ActivityType>('all');
     const [selectedTrace, setSelectedTrace] = useState<string | null>(null);
+    const [verifyingTrade, setVerifyingTrade] = useState<string | null>(null);
+    const [verifiedTrades, setVerifiedTrades] = useState<Set<string>>(new Set());
+    const [pendingTrades, setPendingTrades] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         const storedUser = localStorage.getItem("user");
@@ -309,6 +314,49 @@ export default function Activity() {
                                                         <Eye className="w-4 h-4 mr-2" />
                                                         View Trace
                                                     </Button>
+                                                )}
+
+                                                {/* ZK Proof Verify Button */}
+                                                {isOrder && order?.status === 'FILLED' && (
+                                                    verifiedTrades.has(order.orderId) ? (
+                                                        <span className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                                            <CheckCircle className="w-3.5 h-3.5" />
+                                                            Verified
+                                                        </span>
+                                                    ) : (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            disabled={verifyingTrade === order.orderId}
+                                                            onClick={async () => {
+                                                                setVerifyingTrade(order.orderId);
+                                                                try {
+                                                                    const res = await fetch(`/api/v1/public/zk/verify/${order.orderId}`);
+                                                                    if (res.ok) {
+                                                                        const result = await res.json();
+                                                                        if (result.verified) {
+                                                                            setVerifiedTrades(prev => new Set(prev).add(order.orderId));
+                                                                        } else {
+                                                                            setPendingTrades(prev => new Set(prev).add(order.orderId));
+                                                                        }
+                                                                    } else {
+                                                                        setPendingTrades(prev => new Set(prev).add(order.orderId));
+                                                                    }
+                                                                } catch {
+                                                                    setPendingTrades(prev => new Set(prev).add(order.orderId));
+                                                                } finally {
+                                                                    setVerifyingTrade(null);
+                                                                }
+                                                            }}
+                                                            className={pendingTrades.has(order.orderId)
+                                                                ? 'border-amber-500/40 text-amber-300 hover:bg-amber-500/20'
+                                                                : 'border-purple-500/40 text-purple-300 hover:bg-purple-500/20 hover:border-purple-400'
+                                                            }
+                                                        >
+                                                            <Lock className="w-4 h-4 mr-2" />
+                                                            {verifyingTrade === order.orderId ? 'Verifying...' : pendingTrades.has(order.orderId) ? 'Pending' : 'Verify Proof'}
+                                                        </Button>
+                                                    )
                                                 )}
                                             </div>
                                         </div>
