@@ -87,6 +87,7 @@ export function TransparencyDashboard() {
   const [zkStats, setZkStats] = useState<ZKStats | null>(null);
   const [verifyingTrade, setVerifyingTrade] = useState<string | null>(null);
   const [verifiedTrades, setVerifiedTrades] = useState<Set<string>>(new Set());
+  const [failedTrades, setFailedTrades] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Check if user is logged in
@@ -716,138 +717,6 @@ export function TransparencyDashboard() {
             </div>
           </div>
 
-          {/* Live Trade Feed - Matching Live System Status Style */}
-          <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-700 delay-450">
-            {/* Glowing Background Effect */}
-            <div className="absolute -inset-4 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-indigo-500/10 rounded-3xl blur-2xl" />
-
-
-            <div className="relative bg-slate-900/80 backdrop-blur-2xl border border-cyan-500/20 rounded-3xl overflow-hidden shadow-2xl">
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-cyan-500/10">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-cyan-500/20 rounded-lg">
-                    <Activity className="h-5 w-5 text-cyan-400" />
-                  </div>
-                  <span className="font-semibold text-cyan-100">Live Trade Feed</span>
-                  <span className="text-xs text-cyan-100/50">Click to view trace</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs text-emerald-400 font-medium">LIVE</span>
-                </div>
-              </div>
-
-              {/* Table Header */}
-              <div className="grid grid-cols-12 gap-4 px-6 py-3 text-xs font-medium text-cyan-100/50 uppercase tracking-wider border-b border-cyan-500/10 bg-slate-800/30">
-                <div className="col-span-1">Side</div>
-                <div className="col-span-2">Amount</div>
-                <div className="col-span-3">Price</div>
-                <div className="col-span-2">Trace ID</div>
-                <div className="col-span-2 text-right">Latency</div>
-                <div className="col-span-2 text-right">Proof</div>
-              </div>
-
-              {/* Trades list */}
-              <div className="divide-y divide-cyan-500/10">
-                {trades.map((trade, index) => (
-                  <div key={trade.tradeId}
-                    className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-slate-800/40 transition-colors cursor-pointer group"
-                    onClick={() => trade.traceId && window.open(getJaegerTraceUrl(trade.traceId), '_blank')}
-                  >
-                    {/* Side */}
-                    <div className="col-span-1 flex items-center">
-                      <span className={`text-xs font-semibold px-2 py-1 rounded ${trade.type === 'BUY'
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'bg-rose-500/20 text-rose-400'
-                        }`}>
-                        {trade.type}
-                      </span>
-                    </div>
-
-                    {/* Amount */}
-                    <div className="col-span-2 flex items-center">
-                      <span className="font-mono text-sm text-cyan-100">
-                        {trade.amount.toFixed(4)} <span className="text-cyan-100/50">{trade.asset.split('/')[0]}</span>
-                      </span>
-                    </div>
-
-                    {/* Price */}
-                    <div className="col-span-3 flex items-center">
-                      <span className="font-mono text-sm text-cyan-100/80">
-                        ${trade.price.toLocaleString()}
-                      </span>
-                    </div>
-
-                    {/* Trace ID */}
-                    <div className="col-span-2 flex items-center">
-                      <span className="font-mono text-xs text-cyan-100/50 group-hover:text-cyan-400 transition-colors">
-                        {trade.traceId ? trade.traceId.slice(0, 8) : trade.tradeId.slice(0, 8)}...
-                      </span>
-                      {trade.traceId && (
-                        <span className="ml-1 text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                      )}
-                    </div>
-
-                    {/* Latency */}
-                    <div className="col-span-2 flex items-center justify-end gap-2">
-                      <span className="font-mono text-sm text-amber-400">{trade.executionTimeMs}ms</span>
-                      {trade.aiVerified && (
-                        <Shield className="h-3.5 w-3.5 text-emerald-400" />
-                      )}
-                    </div>
-
-                    {/* Verify Proof Button */}
-                    <div className="col-span-2 flex items-center justify-end">
-                      {verifiedTrades.has(trade.tradeId) ? (
-                        <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium">
-                          <CheckCircle className="h-3.5 w-3.5" />
-                          Verified
-                        </span>
-                      ) : (
-                        <button
-                          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 hover:bg-purple-500/20 hover:text-purple-200 transition-all disabled:opacity-50"
-                          disabled={verifyingTrade === trade.tradeId}
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            setVerifyingTrade(trade.tradeId);
-                            try {
-                              const res = await fetch(`/api/v1/public/zk/verify/${trade.tradeId}`);
-                              if (res.ok) {
-                                const result = await res.json();
-                                if (result.verified) {
-                                  setVerifiedTrades(prev => new Set(prev).add(trade.tradeId));
-                                }
-                              }
-                            } catch (err) {
-                              console.error('Proof verification failed:', err);
-                            } finally {
-                              setVerifyingTrade(null);
-                            }
-                          }}
-                        >
-                          <Lock className="h-3 w-3" />
-                          {verifyingTrade === trade.tradeId ? 'Verifying...' : 'Verify'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {trades.length === 0 && (
-                <div className="text-center py-12 px-6">
-                  <Activity className="h-8 w-8 text-cyan-400/50 mx-auto mb-3" />
-                  <h4 className="text-lg font-medium text-cyan-100 mb-2">Waiting for trades</h4>
-                  <p className="text-sm text-cyan-100/50">
-                    Live trade data will appear here as transactions execute.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-
 
           {/* Performance Metrics - Matching Live System Status Style */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-500">
@@ -998,6 +867,6 @@ export function TransparencyDashboard() {
           </div>
         </div>
       </div>
-    </Layout>
+    </Layout >
   );
 }

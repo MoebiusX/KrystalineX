@@ -15,7 +15,9 @@ import {
     CheckCircle2,
     XCircle,
     Filter,
-    RefreshCw
+    RefreshCw,
+    Lock,
+    CheckCircle
 } from "lucide-react";
 import type { Order, Transfer } from "@shared/schema";
 import { getJaegerTraceUrl } from "@/lib/trace-utils";
@@ -26,6 +28,15 @@ interface User {
     status: string;
 }
 
+interface ProofResult {
+    verified: boolean;
+    tradeId: string;
+    tradeHash: string;
+    proof: string;
+    publicSignals: string[];
+    verifiedAt: string;
+}
+
 type ActivityType = 'all' | 'trades' | 'transfers';
 
 export default function Activity() {
@@ -34,6 +45,10 @@ export default function Activity() {
     const [user, setUser] = useState<User | null>(null);
     const [filter, setFilter] = useState<ActivityType>('all');
     const [selectedTrace, setSelectedTrace] = useState<string | null>(null);
+    const [verifyingTrade, setVerifyingTrade] = useState<string | null>(null);
+    const [verifiedTrades, setVerifiedTrades] = useState<Map<string, ProofResult>>(new Map());
+    const [pendingTrades, setPendingTrades] = useState<Set<string>>(new Set());
+    const [expandedProof, setExpandedProof] = useState<string | null>(null);
 
     useEffect(() => {
         const storedUser = localStorage.getItem("user");
@@ -125,7 +140,7 @@ export default function Activity() {
                             variant="outline"
                             size="sm"
                             onClick={handleRefresh}
-                            className="border-cyan-500/30 text-cyan-100 hover:bg-cyan-500/10"
+                            className="bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white"
                         >
                             <RefreshCw className="w-4 h-4 mr-2" />
                             {t('common:buttons.refresh')}
@@ -140,8 +155,8 @@ export default function Activity() {
                         size="sm"
                         onClick={() => setFilter('all')}
                         className={filter === 'all'
-                            ? 'bg-cyan-600 hover:bg-cyan-700'
-                            : 'border-cyan-500/30 text-cyan-100 hover:bg-cyan-500/10'}
+                            ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                            : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white'}
                     >
                         <Filter className="w-4 h-4 mr-2" />
                         All Activity
@@ -151,8 +166,8 @@ export default function Activity() {
                         size="sm"
                         onClick={() => setFilter('trades')}
                         className={filter === 'trades'
-                            ? 'bg-green-600 hover:bg-green-700'
-                            : 'border-cyan-500/30 text-cyan-100 hover:bg-cyan-500/10'}
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white'}
                     >
                         <ArrowUpRight className="w-4 h-4 mr-2" />
                         Trades
@@ -162,8 +177,8 @@ export default function Activity() {
                         size="sm"
                         onClick={() => setFilter('transfers')}
                         className={filter === 'transfers'
-                            ? 'bg-purple-600 hover:bg-purple-700'
-                            : 'border-cyan-500/30 text-cyan-100 hover:bg-cyan-500/10'}
+                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                            : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white'}
                     >
                         <Send className="w-4 h-4 mr-2" />
                         Transfers
@@ -304,11 +319,58 @@ export default function Activity() {
                                                             setSelectedTrace(traceId);
                                                             window.open(getJaegerTraceUrl(traceId), '_blank');
                                                         }}
-                                                        className="border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-400"
+                                                        className="bg-slate-800 border-slate-600 text-cyan-300 hover:bg-slate-700 hover:text-cyan-200"
                                                     >
                                                         <Eye className="w-4 h-4 mr-2" />
                                                         View Trace
                                                     </Button>
+                                                )}
+
+                                                {/* ZK Proof Verify Button */}
+                                                {isOrder && order?.status === 'FILLED' && (
+                                                    verifiedTrades.has(order.orderId) ? (
+                                                        <button
+                                                            className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 transition-colors cursor-pointer"
+                                                            onClick={() => setExpandedProof(expandedProof === order.orderId ? null : order.orderId)}
+                                                        >
+                                                            <CheckCircle className="w-3.5 h-3.5" />
+                                                            ZK Proof ✓
+                                                        </button>
+                                                    ) : (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            disabled={verifyingTrade === order.orderId}
+                                                            onClick={async () => {
+                                                                setVerifyingTrade(order.orderId);
+                                                                try {
+                                                                    const res = await fetch(`/api/v1/public/zk/verify/${order.orderId}`);
+                                                                    if (res.ok) {
+                                                                        const result = await res.json();
+                                                                        if (result.verified) {
+                                                                            setVerifiedTrades(prev => new Map(prev).set(order.orderId, result));
+                                                                            setExpandedProof(order.orderId);
+                                                                        } else {
+                                                                            setPendingTrades(prev => new Set(prev).add(order.orderId));
+                                                                        }
+                                                                    } else {
+                                                                        setPendingTrades(prev => new Set(prev).add(order.orderId));
+                                                                    }
+                                                                } catch {
+                                                                    setPendingTrades(prev => new Set(prev).add(order.orderId));
+                                                                } finally {
+                                                                    setVerifyingTrade(null);
+                                                                }
+                                                            }}
+                                                            className={`${pendingTrades.has(order.orderId)
+                                                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25'
+                                                                : 'bg-purple-500/15 border-purple-500/30 text-purple-200 hover:bg-purple-500/25'
+                                                                }`}
+                                                        >
+                                                            <Lock className="w-4 h-4 mr-2" />
+                                                            {verifyingTrade === order.orderId ? 'Verifying...' : pendingTrades.has(order.orderId) ? 'Pending' : 'Verify Proof'}
+                                                        </Button>
+                                                    )
                                                 )}
                                             </div>
                                         </div>
@@ -324,6 +386,78 @@ export default function Activity() {
                                                 </div>
                                             </div>
                                         )}
+
+                                        {/* Expandable ZK Proof Details */}
+                                        {isOrder && order && expandedProof === order.orderId && verifiedTrades.has(order.orderId) && (() => {
+                                            const proofData = verifiedTrades.get(order.orderId)!;
+                                            return (
+                                                <div className="mt-3 pt-3 border-t border-emerald-500/20 animate-in slide-in-from-top-1 duration-200">
+                                                    <div className="bg-slate-900/80 rounded-lg p-3 space-y-2 text-xs">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                                            <span className="text-emerald-400 font-semibold">Groth16 zk-SNARK Proof — Trade Integrity</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+                                                            <span className="text-slate-500">Circuit:</span>
+                                                            <span className="text-slate-300 font-mono">trade_integrity (BN128, Groth16)</span>
+                                                            <span className="text-slate-500">Trade Hash:</span>
+                                                            <code className="text-purple-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px] break-all">
+                                                                {proofData.tradeHash}
+                                                            </code>
+                                                            <span className="text-slate-500">Public Inputs:</span>
+                                                            <div className="space-y-1">
+                                                                {proofData.publicSignals?.[0] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Commitment Hash</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px] break-all">
+                                                                            {proofData.publicSignals[0].length > 20 ? proofData.publicSignals[0].slice(0, 10) + '…' + proofData.publicSignals[0].slice(-10) : proofData.publicSignals[0]}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                                {proofData.publicSignals?.[1] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Fill Price (field element)</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
+                                                                            {proofData.publicSignals[1]}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                                {proofData.publicSignals?.[2] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Quantity (field element)</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
+                                                                            {proofData.publicSignals[2]}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                                {proofData.publicSignals?.[3] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Timestamp</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
+                                                                            {new Date(Number(proofData.timestamp)).toLocaleString()} ({proofData.timestamp})
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                                {proofData.traceId && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Trace ID</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
+                                                                            {proofData.traceId}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-slate-500">Verified:</span>
+                                                            <span className="text-emerald-400">{new Date(proofData.verifiedAt).toLocaleString()}</span>
+                                                        </div>
+                                                        <p className="text-slate-500 mt-2 pt-2 border-t border-slate-800">
+                                                            Poseidon(fillPrice, quantity, userId, timestamp, traceId) commitment verified.
+                                                            Anyone can independently verify using snarkjs + the public verification key.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </CardContent>
                                 </Card>
                             );

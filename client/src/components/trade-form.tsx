@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { getJaegerTraceUrl } from "@/lib/trace-utils";
 import { TradeVerifiedModal } from "@/components/trade-verified-modal";
-import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, Loader2, Bitcoin, CheckCircle2, Clock, ExternalLink } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, Loader2, Bitcoin, CheckCircle2, Clock, ExternalLink, Lock, CheckCircle } from "lucide-react";
 
 // Type-safe error message extraction
 const getErrorMessage = (error: unknown): string =>
@@ -58,6 +58,7 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
     const [side, setSide] = useState<"BUY" | "SELL">("BUY");
     const [lastTrade, setLastTrade] = useState<{
         traceId: string;
+        orderId: string;
         side: string;
         quantity: number;
         fillPrice: number;
@@ -65,6 +66,10 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
         timestamp: Date;
     } | null>(null);
     const [showVerifiedModal, setShowVerifiedModal] = useState(false);
+    const [zkVerifyState, setZkVerifyState] = useState<{
+        status: 'idle' | 'verifying' | 'verified' | 'pending';
+        data?: { tradeHash: string; publicSignals: string[]; verifiedAt: string; timestamp?: string; traceId?: string };
+    }>({ status: 'idle' });
     const [verifiedTradeData, setVerifiedTradeData] = useState<{
         tradeId: string;
         traceId?: string;
@@ -209,12 +214,16 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
             // Store last trade for visual feedback
             setLastTrade({
                 traceId,
+                orderId: data.orderId || data.order?.id || '',
                 side: data.order.side,
                 quantity: data.order.quantity,
                 fillPrice: execution?.fillPrice || 0,
                 executionTimeMs: execution?.executionTimeMs || 0,
                 timestamp: new Date(),
             });
+
+            // Reset ZK verify state for new trade
+            setZkVerifyState({ status: 'idle' });
 
             // Clear success state after 10 seconds
             setTimeout(() => setLastTrade(null), 10000);
@@ -357,7 +366,7 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
                             </div>
                             <div className="flex-1">
                                 <div className="flex items-center justify-between">
-                                    <h4 className="font-semibold text-emerald-400">Trade Executed & Verified</h4>
+                                    <h4 className="font-semibold text-emerald-400">Trade Executed & Traced</h4>
                                     <span className="text-xs text-amber-400 flex items-center gap-1">
                                         <Clock className="w-3 h-3" />
                                         {lastTrade.executionTimeMs || '< 1'}ms
@@ -366,41 +375,127 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
                                 <p className="text-sm text-slate-300 mt-1">
                                     {lastTrade.side} {lastTrade.quantity.toFixed(6)} BTC @ ${lastTrade.fillPrice.toLocaleString()}
                                 </p>
-                                <a
-                                    href={getJaegerTraceUrl(lastTrade.traceId)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 mt-2 text-xs text-purple-400 hover:text-purple-300"
-                                >
-                                    <ExternalLink className="w-3 h-3" />
-                                    View trace: {lastTrade.traceId.slice(0, 12)}...
-                                </a>
+                                <div className="flex items-center gap-3 mt-2">
+                                    <a
+                                        href={getJaegerTraceUrl(lastTrade.traceId)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300"
+                                    >
+                                        <ExternalLink className="w-3 h-3" />
+                                        View trace: {lastTrade.traceId.slice(0, 12)}...
+                                    </a>
+                                    {lastTrade.orderId && zkVerifyState.status === 'idle' && (
+                                        <button
+                                            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 transition-colors"
+                                            onClick={async () => {
+                                                setZkVerifyState({ status: 'verifying' });
+                                                try {
+                                                    const res = await fetch(`/api/v1/public/zk/verify/${lastTrade.orderId}`);
+                                                    if (res.ok) {
+                                                        const result = await res.json();
+                                                        if (result.verified) {
+                                                            setZkVerifyState({ status: 'verified', data: result });
+                                                        } else {
+                                                            setZkVerifyState({ status: 'pending' });
+                                                        }
+                                                    } else {
+                                                        setZkVerifyState({ status: 'pending' });
+                                                    }
+                                                } catch {
+                                                    setZkVerifyState({ status: 'pending' });
+                                                }
+                                            }}
+                                        >
+                                            <Lock className="w-3 h-3" />
+                                            Verify ZK Proof
+                                        </button>
+                                    )}
+                                    {zkVerifyState.status === 'verifying' && (
+                                        <span className="inline-flex items-center gap-1 text-xs text-purple-300">
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            Verifying...
+                                        </span>
+                                    )}
+                                    {zkVerifyState.status === 'verified' && (
+                                        <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                                            <CheckCircle className="w-3 h-3" />
+                                            ZK Proof ✓
+                                        </span>
+                                    )}
+                                    {zkVerifyState.status === 'pending' && (
+                                        <span className="inline-flex items-center gap-1 text-xs text-amber-300">
+                                            <Clock className="w-3 h-3" />
+                                            Proof pending
+                                        </span>
+                                    )}
+                                </div>
+                                {/* Expanded ZK proof details */}
+                                {zkVerifyState.status === 'verified' && zkVerifyState.data && (
+                                    <div className="mt-3 pt-3 border-t border-emerald-500/20">
+                                        <div className="bg-slate-900/80 rounded-lg p-3 space-y-1.5 text-xs">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <CheckCircle className="w-3 h-3 text-emerald-400" />
+                                                <span className="text-emerald-400 font-semibold">Groth16 zk-SNARK — Trade Integrity</span>
+                                            </div>
+                                            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                                                <span className="text-slate-500">Circuit:</span>
+                                                <span className="text-slate-300 font-mono text-[11px]">trade_integrity (BN128)</span>
+                                                <span className="text-slate-500">Hash:</span>
+                                                <code className="text-purple-300 font-mono bg-slate-800/50 px-1 rounded text-[11px] break-all">{zkVerifyState.data.tradeHash}</code>
+                                                <span className="text-slate-500">Public Inputs:</span>
+                                                <div className="space-y-1">
+                                                    {zkVerifyState.data.publicSignals?.[0] && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Commitment Hash</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px] break-all">
+                                                                {zkVerifyState.data.publicSignals[0].length > 20 ? zkVerifyState.data.publicSignals[0].slice(0, 10) + '…' + zkVerifyState.data.publicSignals[0].slice(-10) : zkVerifyState.data.publicSignals[0]}
+                                                            </code>
+                                                        </div>
+                                                    )}
+                                                    {zkVerifyState.data.publicSignals?.[1] && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Fill Price (field element)</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
+                                                                {zkVerifyState.data.publicSignals[1]}
+                                                            </code>
+                                                        </div>
+                                                    )}
+                                                    {zkVerifyState.data.publicSignals?.[2] && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Quantity (field element)</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
+                                                                {zkVerifyState.data.publicSignals[2]}
+                                                            </code>
+                                                        </div>
+                                                    )}
+                                                    {zkVerifyState.data.timestamp && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Timestamp</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
+                                                                {new Date(Number(zkVerifyState.data.timestamp)).toLocaleString()} ({zkVerifyState.data.timestamp})
+                                                            </code>
+                                                        </div>
+                                                    )}
+                                                    {zkVerifyState.data.traceId && (
+                                                        <div>
+                                                            <span className="text-slate-400 text-[10px]">Trace ID</span>
+                                                            <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
+                                                                {zkVerifyState.data.traceId}
+                                                            </code>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* Wallet Balance */}
-                <div className="grid grid-cols-2 gap-3 p-3 bg-slate-800 rounded-lg">
-                    <div className="flex items-center gap-2">
-                        <Wallet className="w-4 h-4 text-orange-400" />
-                        <div>
-                            <p className="text-xs text-slate-400">BTC Balance</p>
-                            <p className="font-mono font-bold text-orange-400">
-                                {(wallet?.btc ?? 0).toFixed(6)}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-green-400 font-bold">$</span>
-                        <div>
-                            <p className="text-xs text-slate-400">USD Balance</p>
-                            <p className="font-mono font-bold text-green-400">
-                                {(wallet?.usd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+
 
                 {/* Buy/Sell Toggle */}
                 <div className="grid grid-cols-2 gap-2">

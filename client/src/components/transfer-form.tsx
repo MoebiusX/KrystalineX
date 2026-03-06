@@ -61,9 +61,23 @@ export function TransferForm() {
         }
     }, []);
 
-    // Fetch all verified users
+    // Fetch all verified users — explicit queryFn for proper Kong routing
+    const kongUrl = import.meta.env.VITE_KONG_URL || '';
     const { data: users, isLoading: usersLoading } = useQuery<User[]>({
-        queryKey: ["/api/v1/users"],
+        queryKey: ["/api/v1/users", { userId: currentUser?.id }],
+        queryFn: async () => {
+            const token = localStorage.getItem('accessToken');
+            const res = await fetch(`${kongUrl}/api/v1/users`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+            if (!res.ok) {
+                console.error('[TransferForm] Failed to fetch users:', res.status, res.statusText);
+                return [];
+            }
+            const data = await res.json();
+            console.log('[TransferForm] Fetched users:', data);
+            return data;
+        },
         enabled: !!currentUser,
     });
 
