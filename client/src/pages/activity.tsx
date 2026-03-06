@@ -145,8 +145,8 @@ export default function Activity() {
                         size="sm"
                         onClick={() => setFilter('all')}
                         className={filter === 'all'
-                            ? 'bg-cyan-600 hover:bg-cyan-700'
-                            : 'border-cyan-500/30 text-cyan-100 hover:bg-cyan-500/10'}
+                            ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                            : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white'}
                     >
                         <Filter className="w-4 h-4 mr-2" />
                         All Activity
@@ -156,8 +156,8 @@ export default function Activity() {
                         size="sm"
                         onClick={() => setFilter('trades')}
                         className={filter === 'trades'
-                            ? 'bg-green-600 hover:bg-green-700'
-                            : 'border-cyan-500/30 text-cyan-100 hover:bg-cyan-500/10'}
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white'}
                     >
                         <ArrowUpRight className="w-4 h-4 mr-2" />
                         Trades
@@ -167,8 +167,8 @@ export default function Activity() {
                         size="sm"
                         onClick={() => setFilter('transfers')}
                         className={filter === 'transfers'
-                            ? 'bg-purple-600 hover:bg-purple-700'
-                            : 'border-cyan-500/30 text-cyan-100 hover:bg-cyan-500/10'}
+                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                            : 'bg-slate-800 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white'}
                     >
                         <Send className="w-4 h-4 mr-2" />
                         Transfers
@@ -319,9 +319,12 @@ export default function Activity() {
                                                 {/* ZK Proof Verify Button */}
                                                 {isOrder && order?.status === 'FILLED' && (
                                                     verifiedTrades.has(order.orderId) ? (
-                                                        <span className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                                                        <span
+                                                            className="flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                                            title="Groth16 zk-SNARK trade integrity proof verified — price, quantity, and user hash match on-chain commitment"
+                                                        >
                                                             <CheckCircle className="w-3.5 h-3.5" />
-                                                            Verified
+                                                            ZK Proof ✓
                                                         </span>
                                                     ) : (
                                                         <Button

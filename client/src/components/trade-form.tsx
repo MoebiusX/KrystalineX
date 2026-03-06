@@ -380,27 +380,7 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
                     </div>
                 )}
 
-                {/* Wallet Balance */}
-                <div className="grid grid-cols-2 gap-3 p-3 bg-slate-800 rounded-lg">
-                    <div className="flex items-center gap-2">
-                        <Wallet className="w-4 h-4 text-orange-400" />
-                        <div>
-                            <p className="text-xs text-slate-400">BTC Balance</p>
-                            <p className="font-mono font-bold text-orange-400">
-                                {(wallet?.btc ?? 0).toFixed(6)}
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-green-400 font-bold">$</span>
-                        <div>
-                            <p className="text-xs text-slate-400">USD Balance</p>
-                            <p className="font-mono font-bold text-green-400">
-                                {(wallet?.usd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+
 
                 {/* Buy/Sell Toggle */}
                 <div className="grid grid-cols-2 gap-2">
