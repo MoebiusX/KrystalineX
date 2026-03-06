@@ -68,7 +68,7 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
     const [showVerifiedModal, setShowVerifiedModal] = useState(false);
     const [zkVerifyState, setZkVerifyState] = useState<{
         status: 'idle' | 'verifying' | 'verified' | 'pending';
-        data?: { tradeHash: string; publicSignals: string[]; verifiedAt: string };
+        data?: { tradeHash: string; publicSignals: string[]; verifiedAt: string; timestamp?: string; traceId?: string };
     }>({ status: 'idle' });
     const [verifiedTradeData, setVerifiedTradeData] = useState<{
         tradeId: string;
@@ -469,19 +469,19 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
                                                             </code>
                                                         </div>
                                                     )}
-                                                    {zkVerifyState.data.publicSignals?.[3] && (
+                                                    {zkVerifyState.data.timestamp && (
                                                         <div>
-                                                            <span className="text-slate-400 text-[10px]">Timestamp (epoch ms)</span>
+                                                            <span className="text-slate-400 text-[10px]">Timestamp</span>
                                                             <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
-                                                                {zkVerifyState.data.publicSignals[3]}
+                                                                {new Date(Number(zkVerifyState.data.timestamp)).toLocaleString()} ({zkVerifyState.data.timestamp})
                                                             </code>
                                                         </div>
                                                     )}
-                                                    {zkVerifyState.data.publicSignals?.[4] && (
+                                                    {zkVerifyState.data.traceId && (
                                                         <div>
-                                                            <span className="text-slate-400 text-[10px]">Trace ID (field element)</span>
+                                                            <span className="text-slate-400 text-[10px]">Trace ID</span>
                                                             <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1 rounded text-[11px]">
-                                                                {zkVerifyState.data.publicSignals[4]}
+                                                                {zkVerifyState.data.traceId}
                                                             </code>
                                                         </div>
                                                     )}

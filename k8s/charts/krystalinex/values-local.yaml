@@ -46,7 +46,7 @@ rabbitmq:
 server:
   image:
     repository: moebiusx/krystalinex-server
-    tag: "v2.2.8"
+    tag: "v2.2.9"
     pullPolicy: Always
   resources:
     limits:
@@ -104,7 +104,7 @@ paymentProcessor:
 frontend:
   image:
     repository: moebiusx/krystalinex-frontend
-    tag: "v2.1.22"
+    tag: "v2.1.23"
     pullPolicy: Always
   resources:
     limits:

@@ -432,17 +432,17 @@ export default function Activity() {
                                                                 )}
                                                                 {proofData.publicSignals?.[3] && (
                                                                     <div>
-                                                                        <span className="text-slate-400 text-[10px]">Timestamp (epoch ms)</span>
+                                                                        <span className="text-slate-400 text-[10px]">Timestamp</span>
                                                                         <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
-                                                                            {proofData.publicSignals[3]}
+                                                                            {new Date(Number(proofData.timestamp)).toLocaleString()} ({proofData.timestamp})
                                                                         </code>
                                                                     </div>
                                                                 )}
-                                                                {proofData.publicSignals?.[4] && (
+                                                                {proofData.traceId && (
                                                                     <div>
-                                                                        <span className="text-slate-400 text-[10px]">Trace ID (field element)</span>
+                                                                        <span className="text-slate-400 text-[10px]">Trace ID</span>
                                                                         <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
-                                                                            {proofData.publicSignals[4]}
+                                                                            {proofData.traceId}
                                                                         </code>
                                                                     </div>
                                                                 )}

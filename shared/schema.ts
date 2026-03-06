@@ -342,13 +342,15 @@ export type DbTradeRow = z.infer<typeof dbTradeRowSchema>;
 // ZK Proof - generated for each filled trade
 export const zkProofSchema = z.object({
   tradeId: z.string(),
-  tradeHash: z.string(),              // SHA256(orderId + traceId)
-  proof: z.string(),                  // Phase 1: SHA256 commitment, Phase 2: Groth16 proof
+  tradeHash: z.string(),              // Poseidon(fillPrice, quantity, userId, timestamp, traceId)
+  proof: z.string(),                  // Groth16 proof JSON
   publicSignals: z.array(z.string()), // [tradeHash, priceLow, priceHigh]
   verificationKey: z.string(),
   circuit: z.literal('trade_integrity'),
   generatedAt: z.string(),
   provingTimeMs: z.number(),
+  timestamp: z.string().optional(),   // Unix epoch ms (Phase 3)
+  traceId: z.string().optional(),     // OTel trace ID (Phase 3)
 });
 
 // ZK Solvency Proof - aggregate proof of reserves
@@ -386,6 +388,8 @@ export const zkVerifyResultSchema = z.object({
   proof: z.string(),
   publicSignals: z.array(z.string()),
   verifiedAt: z.string(),
+  timestamp: z.string().optional(),   // Unix epoch ms (Phase 3)
+  traceId: z.string().optional(),     // OTel trace ID (Phase 3)
 });
 
 // Export ZK types

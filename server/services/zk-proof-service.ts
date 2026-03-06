@@ -248,6 +248,8 @@ class ZKProofService {
                     circuit: 'trade_integrity',
                     generatedAt: new Date().toISOString(),
                     provingTimeMs,
+                    timestamp: circuitInputs.timestamp,   // Phase 3: epoch ms
+                    traceId: input.traceId,               // Phase 3: OTel trace ID
                 };
 
                 // Cache the proof
@@ -440,6 +442,8 @@ class ZKProofService {
                 proof: cachedProof.proof,
                 publicSignals: cachedProof.publicSignals,
                 verifiedAt: new Date().toISOString(),
+                timestamp: cachedProof.timestamp,
+                traceId: cachedProof.traceId,
             };
         } catch (error) {
             logger.error({ err: error, tradeId }, 'Proof verification error');
@@ -450,6 +454,8 @@ class ZKProofService {
                 proof: cachedProof.proof,
                 publicSignals: cachedProof.publicSignals,
                 verifiedAt: new Date().toISOString(),
+                timestamp: cachedProof.timestamp,
+                traceId: cachedProof.traceId,
             };
         }
     }
