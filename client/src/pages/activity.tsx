@@ -404,13 +404,32 @@ export default function Activity() {
                                                             <code className="text-purple-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px] break-all">
                                                                 {proofData.tradeHash}
                                                             </code>
-                                                            <span className="text-slate-500">Public Signals:</span>
-                                                            <div className="space-y-0.5">
-                                                                {proofData.publicSignals?.map((signal, i) => (
-                                                                    <code key={i} className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px] break-all">
-                                                                        [{i}] {signal.length > 20 ? signal.slice(0, 10) + '…' + signal.slice(-10) : signal}
-                                                                    </code>
-                                                                ))}
+                                                            <span className="text-slate-500">Public Inputs:</span>
+                                                            <div className="space-y-1">
+                                                                {proofData.publicSignals?.[0] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Commitment Hash</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px] break-all">
+                                                                            {proofData.publicSignals[0].length > 20 ? proofData.publicSignals[0].slice(0, 10) + '…' + proofData.publicSignals[0].slice(-10) : proofData.publicSignals[0]}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                                {proofData.publicSignals?.[1] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Fill Price (field element)</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
+                                                                            {proofData.publicSignals[1]}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                                {proofData.publicSignals?.[2] && (
+                                                                    <div>
+                                                                        <span className="text-slate-400 text-[10px]">Quantity (field element)</span>
+                                                                        <code className="block text-cyan-300 font-mono bg-slate-800/50 px-1.5 py-0.5 rounded text-[11px]">
+                                                                            {proofData.publicSignals[2]}
+                                                                        </code>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             <span className="text-slate-500">Verified:</span>
                                                             <span className="text-emerald-400">{new Date(proofData.verifiedAt).toLocaleString()}</span>
