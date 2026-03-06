@@ -11,6 +11,7 @@ import { OrderError, ValidationError, InsufficientFundsError, getErrorMessage } 
 import { recordTrade, recordOrderMetrics } from '../metrics/prometheus';
 import { amountAnomalyDetector } from '../monitor/amount-anomaly-detector';
 import { priceService } from '../services/price-service';
+import { zkProofService } from '../services/zk-proof-service';
 import type { Order } from '@shared/schema';
 
 const logger = createLogger('order');
@@ -279,6 +280,15 @@ export class OrderService {
                         amount: request.quantity,
                         traceId,
                     });
+                    // Proof of Integrity™ — Generate ZK proof (non-blocking, fire-and-forget)
+                    zkProofService.generateTradeProof({
+                        orderId,
+                        traceId,
+                        fillPrice: safeExecutionResponse.fillPrice,
+                        quantity: request.quantity,
+                        userId,
+                        binancePrice: price,
+                    }).catch(err => logger.error({ err, orderId }, 'ZK proof generation failed'));
                 } catch (walletError: unknown) {
                     // Wallet update failed (e.g., balance constraint violation)
                     // Mark order as rejected to prevent stuck pending orders
