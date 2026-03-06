@@ -39,7 +39,6 @@ secrets/
 # Confidential documentation (whitepaper, screenshots, zip bundles)
 docs/OBSERVABILITY_ADOPTION_GUIDE.md
 docs/OBSERVABILITY_MATHEMATICS.md
-docs/images/
 docs/api/
 docs/*.zip
 docs-bundle.zip
