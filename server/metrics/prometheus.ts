@@ -12,12 +12,14 @@ import {
     Histogram,
     Gauge,
 } from 'prom-client';
+import { trace } from '@opentelemetry/api';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('prometheus-metrics');
 
-// Create a custom registry
+// Create a custom registry with OpenMetrics format (required for exemplar support)
 const register = new Registry();
+register.setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
 
 // Collect default Node.js metrics (CPU, memory, event loop, etc.)
 collectDefaultMetrics({
@@ -45,13 +47,14 @@ export const httpRequestErrorsTotal = new Counter({
     registers: [register],
 });
 
-// Duration: Request latency histogram
+// Duration: Request latency histogram (with exemplar support for trace linking)
 export const httpRequestDuration = new Histogram({
     name: 'http_request_duration_seconds',
     help: 'HTTP request duration in seconds',
     labelNames: ['method', 'route'],
     buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
     registers: [register],
+    enableExemplars: true,
 });
 
 // ============================================
@@ -217,8 +220,18 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
             httpRequestErrorsTotal.inc({ method, route, status_code: statusCode });
         }
 
-        // Record duration
-        httpRequestDuration.observe({ method, route }, durationMs);
+        // Record duration with trace exemplar for Grafana linking
+        const span = trace.getActiveSpan();
+        const traceId = span?.spanContext().traceId;
+        if (traceId) {
+            (httpRequestDuration as any).observe({
+                labels: { method, route },
+                value: durationMs,
+                exemplarLabels: { traceID: traceId },
+            });
+        } else {
+            httpRequestDuration.observe({ method, route }, durationMs);
+        }
     });
 
     next();

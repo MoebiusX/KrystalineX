@@ -92,6 +92,29 @@ export function initBrowserOtel(): void {
 
     otelEnabled = true;
     console.log('[OTEL] Browser instrumentation initialized - service.name: react-client');
+
+    // Report Core Web Vitals as OTEL spans
+    const vitalTracer = provider.getTracer('web-vitals');
+    import('web-vitals').then(({ onLCP, onINP, onCLS, onFCP, onTTFB }) => {
+        const report = (metric: { name: string; value: number; rating: string; id: string; delta: number; entries: unknown[]; navigationType: string }) => {
+            const span = vitalTracer.startSpan(`web-vital.${metric.name}`);
+            span.setAttribute('web_vital.name', metric.name);
+            span.setAttribute('web_vital.value', metric.value);
+            span.setAttribute('web_vital.rating', metric.rating);
+            span.setAttribute('web_vital.id', metric.id);
+            span.setAttribute('web_vital.delta', metric.delta);
+            span.setAttribute('web_vital.navigation_type', metric.navigationType);
+            span.end();
+        };
+        onLCP(report);
+        onINP(report);
+        onCLS(report);
+        onFCP(report);
+        onTTFB(report);
+        console.log('[OTEL] Web Vitals reporting enabled');
+    }).catch((err: Error) => {
+        console.warn('[OTEL] Web Vitals not available:', err.message);
+    });
 }
 
 export function isOtelEnabled(): boolean {

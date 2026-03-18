@@ -29,6 +29,7 @@ import tradeRoutes from "./trade/routes";
 import publicRoutes from "./api/public-routes";
 import healthRoutes from "./api/health-routes";
 import { binanceFeed } from "./services/binance-feed";
+import { createUserContextMiddleware } from "./middleware/user-context";
 
 const logger = createLogger('server');
 const app = express();
@@ -67,6 +68,9 @@ app.use(express.urlencoded({ extended: false }));
 
 // CORS configuration (environment-aware)
 app.use(corsMiddleware);
+
+// Propagate authenticated user ID to OTEL spans
+app.use(createUserContextMiddleware());
 
 (async () => {
   // Initialize PostgreSQL storage FIRST (before any routes use it)
