@@ -4,6 +4,7 @@ import { config } from '../config';
 import { createLogger } from '../lib/logger';
 import { ExternalServiceError, TimeoutError, getErrorMessage } from '../lib/errors';
 import { createCircuitBreaker, CircuitBreaker } from '../lib/circuit-breaker';
+import { recordCircuitBreakerTrip } from '../metrics/prometheus';
 
 const logger = createLogger('rabbitmq');
 
@@ -57,6 +58,7 @@ export class RabbitMQClient {
       timeout: 30000,
       onStateChange: (from, to) => {
         logger.warn({ from, to }, 'RabbitMQ circuit breaker state changed');
+        recordCircuitBreakerTrip('rabbitmq', from, to);
       },
     });
   }

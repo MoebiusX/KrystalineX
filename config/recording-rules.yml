@@ -1,0 +1,140 @@
+# ============================================
+# SLO Recording Rules — KrystalineX
+# Pre-computed metrics for SLO dashboards & burn-rate alerts
+# ============================================
+#
+# SLO Definitions:
+#   Availability: 99.9% of requests return non-5xx (30-day window)
+#   Latency:      95% of requests < 500ms, 99% < 2s (30-day window)
+#
+# Error budget (30 days):
+#   99.9% availability = 43.2 minutes of downtime allowed
+#
+groups:
+  # ============================================
+  # ERROR RATE RECORDING RULES
+  # ============================================
+  - name: slo:error_rates
+    interval: 30s
+    rules:
+      # 5-minute error ratio (for short-window burn rate)
+      - record: slo:http_requests:error_ratio_5m
+        expr: |
+          sum(rate(http_request_errors_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+
+      # 30-minute error ratio
+      - record: slo:http_requests:error_ratio_30m
+        expr: |
+          sum(rate(http_request_errors_total{status_code=~"5.."}[30m]))
+          /
+          sum(rate(http_requests_total[30m]))
+
+      # 1-hour error ratio
+      - record: slo:http_requests:error_ratio_1h
+        expr: |
+          sum(rate(http_request_errors_total{status_code=~"5.."}[1h]))
+          /
+          sum(rate(http_requests_total[1h]))
+
+      # 2-hour error ratio
+      - record: slo:http_requests:error_ratio_2h
+        expr: |
+          sum(rate(http_request_errors_total{status_code=~"5.."}[2h]))
+          /
+          sum(rate(http_requests_total[2h]))
+
+      # 6-hour error ratio
+      - record: slo:http_requests:error_ratio_6h
+        expr: |
+          sum(rate(http_request_errors_total{status_code=~"5.."}[6h]))
+          /
+          sum(rate(http_requests_total[6h]))
+
+      # 1-day error ratio
+      - record: slo:http_requests:error_ratio_1d
+        expr: |
+          sum(rate(http_request_errors_total{status_code=~"5.."}[1d]))
+          /
+          sum(rate(http_requests_total[1d]))
+
+      # 3-day error ratio
+      - record: slo:http_requests:error_ratio_3d
+        expr: |
+          sum(rate(http_request_errors_total{status_code=~"5.."}[3d]))
+          /
+          sum(rate(http_requests_total[3d]))
+
+  # ============================================
+  # LATENCY RECORDING RULES
+  # ============================================
+  - name: slo:latency
+    interval: 30s
+    rules:
+      # Fraction of requests faster than 500ms (latency SLO target)
+      - record: slo:http_request_duration:ratio_below_500ms_5m
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="0.5"}[5m]))
+          /
+          sum(rate(http_request_duration_seconds_count[5m]))
+
+      - record: slo:http_request_duration:ratio_below_500ms_1h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="0.5"}[1h]))
+          /
+          sum(rate(http_request_duration_seconds_count[1h]))
+
+      - record: slo:http_request_duration:ratio_below_500ms_1d
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="0.5"}[1d]))
+          /
+          sum(rate(http_request_duration_seconds_count[1d]))
+
+      # Fraction of requests faster than 2s (latency P99 target)
+      - record: slo:http_request_duration:ratio_below_2s_5m
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="2"}[5m]))
+          /
+          sum(rate(http_request_duration_seconds_count[5m]))
+
+      # P95 and P99 quantiles
+      - record: slo:http_request_duration:p95_5m
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+      - record: slo:http_request_duration:p99_5m
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+      - record: slo:http_request_duration:p95_1h
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1h])) by (le))
+
+      - record: slo:http_request_duration:p99_1h
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[1h])) by (le))
+
+  # ============================================
+  # ERROR BUDGET TRACKING
+  # ============================================
+  - name: slo:error_budget
+    interval: 1m
+    rules:
+      # Availability error budget remaining (1 = 100% budget left, 0 = exhausted)
+      # SLO target = 0.999, so allowed error ratio = 0.001
+      - record: slo:availability:error_budget_remaining
+        expr: |
+          1 - (
+            slo:http_requests:error_ratio_1d
+            / (1 - 0.999)
+          )
+
+      # Latency error budget remaining
+      # SLO target = 0.95 of requests under 500ms
+      - record: slo:latency:error_budget_remaining
+        expr: |
+          1 - (
+            (1 - slo:http_request_duration:ratio_below_500ms_1d)
+            / (1 - 0.95)
+          )

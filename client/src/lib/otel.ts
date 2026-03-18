@@ -26,8 +26,9 @@ export function initBrowserOtel(): void {
     // Create resource with service name using OTEL v2 API
     const resource = resourceFromAttributes({
         [SemanticResourceAttributes.SERVICE_NAME]: 'kx-wallet',
-        [SemanticResourceAttributes.SERVICE_NAMESPACE]: 'web',
-        [SemanticResourceAttributes.SERVICE_VERSION]: '1.0.0',
+        [SemanticResourceAttributes.SERVICE_NAMESPACE]: 'krystalinex',
+        [SemanticResourceAttributes.SERVICE_VERSION]: import.meta.env.VITE_APP_VERSION || '1.0.0',
+        'deployment.environment': import.meta.env.MODE || 'development',
     });
 
     // Configure OTLP exporter to send traces to the OTEL collector (with CORS)

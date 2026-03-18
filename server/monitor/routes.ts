@@ -556,5 +556,77 @@ router.put('/model', (req, res) => {
     });
 });
 
+// ============================================
+// SLO (Service Level Objectives) Routes
+// ============================================
+
+const PROMETHEUS_URL = process.env.PROMETHEUS_URL || 'http://localhost:9090';
+
+async function queryPrometheus(query: string): Promise<number | null> {
+    try {
+        const url = `${PROMETHEUS_URL}/api/v1/query?query=${encodeURIComponent(query)}`;
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const data = await response.json() as { status: string; data: { result: Array<{ value: [number, string] }> } };
+        if (data.status !== 'success' || !data.data.result.length) return null;
+        return parseFloat(data.data.result[0].value[1]);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * GET /api/monitor/slo
+ * Current SLO status: availability, latency, error budgets, burn rates
+ */
+router.get('/slo', async (_req, res) => {
+    try {
+        const [
+            errorRatio1h,
+            errorRatio6h,
+            latencyRatio1h,
+            availabilityBudget,
+            latencyBudget,
+            p95_5m,
+            p99_5m,
+        ] = await Promise.all([
+            queryPrometheus('slo:http_requests:error_ratio_1h'),
+            queryPrometheus('slo:http_requests:error_ratio_6h'),
+            queryPrometheus('slo:http_request_duration:ratio_below_500ms_1h'),
+            queryPrometheus('slo:availability:error_budget_remaining'),
+            queryPrometheus('slo:latency:error_budget_remaining'),
+            queryPrometheus('slo:http_request_duration:p95_5m'),
+            queryPrometheus('slo:http_request_duration:p99_5m'),
+        ]);
+
+        const availabilityTarget = 0.999;
+        const latencyTarget = 0.95;
+        const allowedErrorRatio = 1 - availabilityTarget; // 0.001
+
+        res.json({
+            availability: {
+                target: availabilityTarget,
+                current: errorRatio1h !== null ? 1 - errorRatio1h : null,
+                burnRate1h: errorRatio1h !== null ? errorRatio1h / allowedErrorRatio : null,
+                burnRate6h: errorRatio6h !== null ? errorRatio6h / allowedErrorRatio : null,
+                budgetRemaining: availabilityBudget,
+                budgetMinutesRemaining: availabilityBudget !== null ? Math.max(0, availabilityBudget * 43.2) : null,
+            },
+            latency: {
+                target: latencyTarget,
+                targetMs: 500,
+                currentRatioBelow500ms: latencyRatio1h,
+                p95Ms: p95_5m !== null ? p95_5m * 1000 : null,
+                p99Ms: p99_5m !== null ? p99_5m * 1000 : null,
+                budgetRemaining: latencyBudget,
+            },
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Failed to fetch SLO data');
+        res.status(500).json({ error: 'Failed to fetch SLO data' });
+    }
+});
+
 export default router;
 

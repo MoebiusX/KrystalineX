@@ -12,6 +12,9 @@ datasources:
     jsonData:
       httpMethod: POST
       prometheusType: Prometheus
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: jaeger
 
   # Loki - Logs
   - name: Loki
@@ -23,7 +26,11 @@ datasources:
     jsonData:
       derivedFields:
         - datasourceUid: jaeger
-          matcherRegex: '"traceId":"([a-f0-9]+)"'
+          matcherRegex: '"traceId"\s*:\s*"(\w+)"'
+          name: TraceID
+          url: '$${__value.raw}'
+        - datasourceUid: jaeger
+          matcherRegex: 'traceId=(\w+)'
           name: TraceID
           url: '$${__value.raw}'
 
@@ -34,3 +41,10 @@ datasources:
     access: proxy
     url: http://jaeger:16686
     editable: false
+    jsonData:
+      tracesToLogs:
+        datasourceUid: loki
+        filterByTraceID: true
+        spanStartTimeShift: "-1h"
+        spanEndTimeShift: "1h"
+        lokiSearch: true

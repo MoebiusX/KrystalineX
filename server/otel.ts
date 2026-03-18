@@ -1,10 +1,12 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
-import { SimpleSpanProcessor, SpanExporter } from '@opentelemetry/sdk-trace-node';
+import { SimpleSpanProcessor, BatchSpanProcessor, SpanExporter } from '@opentelemetry/sdk-trace-node';
 import { ExportResult, ExportResultCode } from '@opentelemetry/core';
 import { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import os from 'os';
 
 // Only enable verbose OTEL logging in development with DEBUG flag
 const OTEL_DEBUG = process.env.NODE_ENV !== 'production' && process.env.OTEL_DEBUG === 'true';
@@ -111,12 +113,21 @@ const jaegerExporter = new OTLPTraceExporter({
   headers: {},
 });
 
+// Resource attributes for service identification (aligned across environments)
+const serviceResource = resourceFromAttributes({
+  [SemanticResourceAttributes.SERVICE_NAME]: 'kx-exchange',
+  [SemanticResourceAttributes.SERVICE_VERSION]: process.env.npm_package_version || '1.0.0',
+  [SemanticResourceAttributes.SERVICE_NAMESPACE]: 'krystalinex',
+  'deployment.environment': process.env.NODE_ENV || 'development',
+  'service.instance.id': os.hostname(),
+});
+
 // Initialize OpenTelemetry SDK with multiple exporters
 const sdk = new NodeSDK({
-  serviceName: 'kx-exchange',
+  resource: serviceResource,
   spanProcessors: [
-    new SimpleSpanProcessor(traceCollector),     // For local UI
-    new SimpleSpanProcessor(jaegerExporter)      // For Jaeger (immediate export)
+    new SimpleSpanProcessor(traceCollector),     // For local UI (immediate)
+    new BatchSpanProcessor(jaegerExporter)        // For Jaeger (batched for efficiency)
   ],
   instrumentations: [getNodeAutoInstrumentations({
     // Disable fs instrumentation to reduce noise
