@@ -231,14 +231,17 @@ describe('Cap 8A: CI Configuration Validation', () => {
     });
 
     describe('Grafana Datasource Exemplar Linking', () => {
-        it('Docker datasource should have exemplarTraceIdDestinations on Prometheus', () => {
+        it('Docker datasource should have exemplarTraceIdDestinations with direct Explore URL', () => {
             const dsPath = path.join(CONFIG_DIR, 'grafana/provisioning/datasources/datasources.yaml');
             const content = fs.readFileSync(dsPath, 'utf-8');
             const parsed = yaml.load(content) as any;
             const promDs = parsed.datasources.find((d: any) => d.type === 'prometheus');
-            expect(promDs.jsonData.exemplarTraceIdDestinations).toBeDefined();
-            expect(promDs.jsonData.exemplarTraceIdDestinations[0].name).toBe('traceID');
-            expect(promDs.jsonData.exemplarTraceIdDestinations[0].datasourceUid).toBe('jaeger');
+            const dest = promDs.jsonData.exemplarTraceIdDestinations[0];
+            expect(dest.name).toBe('traceID');
+            // Should use URL-based approach for direct trace viewing
+            expect(dest.url).toContain('/explore');
+            expect(dest.url).toContain('jaeger');
+            expect(dest.urlDisplayLabel).toBe('View trace');
         });
 
         it('Docker Jaeger datasource should have nodeGraph enabled', () => {
@@ -250,7 +253,7 @@ describe('Cap 8A: CI Configuration Validation', () => {
             expect(jaegerDs.jsonData.nodeGraph.enabled).toBe(true);
         });
 
-        it('K8s datasource should have exemplarTraceIdDestinations on Prometheus', () => {
+        it('K8s datasource should have exemplarTraceIdDestinations with direct Explore URL', () => {
             const k8sPath = path.resolve(
                 __dirname,
                 '../../k8s/charts/krystalinex/templates/configmap-grafana-datasources.yaml'
@@ -258,6 +261,8 @@ describe('Cap 8A: CI Configuration Validation', () => {
             const content = fs.readFileSync(k8sPath, 'utf-8');
             expect(content).toContain('exemplarTraceIdDestinations');
             expect(content).toContain('traceID');
+            expect(content).toContain('View trace');
+            expect(content).toContain('/explore');
         });
 
         it('K8s Jaeger datasource should have nodeGraph enabled', () => {
