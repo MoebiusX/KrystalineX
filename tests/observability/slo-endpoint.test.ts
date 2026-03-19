@@ -56,6 +56,10 @@ vi.mock('../../server/monitor/amount-anomaly-detector', () => ({
     amountAnomalyDetector: { getActiveAnomalies: vi.fn(() => []) },
 }));
 
+vi.mock('../../server/monitor/topology-service', () => ({
+    topologyService: { getGraph: vi.fn().mockResolvedValue({ nodes: [], edges: [], updatedAt: '' }), getBlastRadius: vi.fn().mockReturnValue([]) },
+}));
+
 vi.mock('../../server/monitor/baseline-calculator', () => ({
     baselineCalculator: { recalculate: vi.fn(), getEnrichedBaselines: vi.fn(() => []) },
 }));

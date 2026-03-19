@@ -32,6 +32,9 @@ vi.mock('../../server/monitor/metrics-correlator', () => ({ metricsCorrelator: {
 vi.mock('../../server/monitor/training-store', () => ({ trainingStore: {} }));
 vi.mock('../../server/monitor/amount-profiler', () => ({ amountProfiler: {} }));
 vi.mock('../../server/monitor/amount-anomaly-detector', () => ({ amountAnomalyDetector: {} }));
+vi.mock('../../server/monitor/topology-service', () => ({
+    topologyService: { getGraph: vi.fn().mockResolvedValue({ nodes: [], edges: [], updatedAt: '' }), getBlastRadius: vi.fn().mockReturnValue([]) },
+}));
 vi.mock('../../server/services/transparency-service', () => ({
     transparencyService: { getStatus: vi.fn() },
 }));
