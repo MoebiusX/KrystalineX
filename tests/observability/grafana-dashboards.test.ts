@@ -122,6 +122,53 @@ describe('Cap 12: Grafana Dashboard Validation', () => {
         });
     });
 
+    describe('Exemplar support (metrics → traces linking)', () => {
+        it('should have a latency panel with exemplar: true on targets', () => {
+            const dashboard = loadDashboard('unified-observability.json');
+            const latencyPanel = dashboard.panels.find(p =>
+                p.title.toLowerCase().includes('latenc') && p.type === 'timeseries'
+            );
+            expect(latencyPanel).toBeDefined();
+            expect(latencyPanel!.targets).toBeDefined();
+            const hasExemplar = latencyPanel!.targets!.some(
+                (t: any) => t.exemplar === true
+            );
+            expect(hasExemplar).toBe(true);
+        });
+
+        it('should have a dedicated exemplar-enabled histogram panel', () => {
+            const dashboard = loadDashboard('unified-observability.json');
+            const exemplarPanel = dashboard.panels.find(p =>
+                p.title.toLowerCase().includes('exemplar')
+            );
+            expect(exemplarPanel).toBeDefined();
+            expect(exemplarPanel!.type).toBe('timeseries');
+            // Should query the raw histogram metric
+            const queriesRawHistogram = exemplarPanel!.targets!.some(
+                (t: any) => t.expr && t.expr.includes('http_request_duration_seconds')
+            );
+            expect(queriesRawHistogram).toBe(true);
+            // All targets should have exemplar enabled
+            const allExemplarsEnabled = exemplarPanel!.targets!.every(
+                (t: any) => t.exemplar === true
+            );
+            expect(allExemplarsEnabled).toBe(true);
+        });
+
+        it('SLO dashboard latency panel should have exemplar: true', () => {
+            const dashboard = loadDashboard('slo-dashboard.json');
+            const latencyPanel = dashboard.panels.find(p =>
+                p.title.toLowerCase().includes('latenc') && p.type === 'timeseries'
+            );
+            expect(latencyPanel).toBeDefined();
+            expect(latencyPanel!.targets).toBeDefined();
+            const hasExemplar = latencyPanel!.targets!.some(
+                (t: any) => t.exemplar === true
+            );
+            expect(hasExemplar).toBe(true);
+        });
+    });
+
     describe('All dashboards structural validation', () => {
         const dashboardFiles = [
             'unified-observability.json',
