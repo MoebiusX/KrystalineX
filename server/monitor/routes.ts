@@ -12,6 +12,7 @@ import { metricsCorrelator } from './metrics-correlator';
 import { trainingStore } from './training-store';
 import { amountProfiler } from './amount-profiler';
 import { amountAnomalyDetector } from './amount-anomaly-detector';
+import { topologyService } from './topology-service';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
 import type {
@@ -626,6 +627,106 @@ router.get('/slo', async (_req, res) => {
         logger.error({ err: error }, 'Failed to fetch SLO data');
         res.status(500).json({ error: 'Failed to fetch SLO data' });
     }
+});
+
+// ============================================
+// Service Topology Routes (Cap 4: Causal Inference)
+// ============================================
+
+/**
+ * GET /api/monitor/topology
+ * Returns the current service dependency graph from Jaeger with blast radius analysis.
+ */
+router.get('/topology', async (req, res) => {
+    try {
+        const graph = await topologyService.getGraph();
+        const service = req.query.blastRadius as string | undefined;
+        const blastRadius = service ? topologyService.getBlastRadius(service) : undefined;
+
+        res.json({
+            ...graph,
+            ...(blastRadius !== undefined && { blastRadius: { service, impacted: blastRadius } }),
+        });
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Failed to fetch service topology');
+        res.status(500).json({ error: 'Failed to fetch service topology' });
+    }
+});
+
+// ============================================
+// Deployment Events Routes (Cap 13: Cross-Domain Correlation)
+// ============================================
+
+interface DeploymentEvent {
+    id: string;
+    type: string;
+    version?: string;
+    commit?: string;
+    deployer?: string;
+    description?: string;
+    environment?: string;
+    timestamp: string;
+}
+
+// In-memory event store (production: PostgreSQL)
+const deploymentEvents: DeploymentEvent[] = [];
+
+/**
+ * POST /api/monitor/events
+ * Record a deployment or operational event for correlation with anomalies.
+ */
+router.post('/events', (req, res) => {
+    const { type, version, commit, deployer, description, environment } = req.body;
+
+    if (!type) {
+        return res.status(400).json({ error: 'Field "type" is required' });
+    }
+    if (type === 'deployment' && !version) {
+        return res.status(400).json({ error: 'Field "version" is required for deployment events' });
+    }
+
+    const event: DeploymentEvent = {
+        id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type,
+        version,
+        commit,
+        deployer,
+        description,
+        environment,
+        timestamp: new Date().toISOString(),
+    };
+
+    deploymentEvents.push(event);
+    logger.info({ event }, 'Recorded deployment event');
+
+    return res.status(201).json(event);
+});
+
+/**
+ * GET /api/monitor/events
+ * Query deployment events, optionally filtered by type or time window.
+ */
+router.get('/events', (req, res) => {
+    const typeFilter = req.query.type as string | undefined;
+    const near = req.query.near ? parseInt(req.query.near as string) : undefined;
+    const window = req.query.window ? parseInt(req.query.window as string) : 600000; // 10 min default
+
+    let events = [...deploymentEvents];
+
+    if (typeFilter) {
+        events = events.filter(e => e.type === typeFilter);
+    }
+
+    if (near !== undefined) {
+        events = events.filter(e => {
+            const eventTime = new Date(e.timestamp).getTime();
+            return Math.abs(eventTime - near) <= window;
+        });
+    }
+
+    // Return most recent first, limit 100
+    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    res.json({ events: events.slice(0, 100) });
 });
 
 // ============================================
