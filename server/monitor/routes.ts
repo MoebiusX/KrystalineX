@@ -628,5 +628,46 @@ router.get('/slo', async (_req, res) => {
     }
 });
 
+// ============================================
+// PromQL Proxy Routes (Cap 12: Programmability)
+// ============================================
+
+/**
+ * GET /api/monitor/query
+ * Proxies PromQL queries to Prometheus for dashboard and programmatic use.
+ * Supports both instant and range queries.
+ */
+router.get('/query', async (req, res) => {
+    const query = req.query.q as string | undefined;
+    if (!query) {
+        return res.status(400).json({ error: 'Query parameter "q" is required' });
+    }
+
+    const type = (req.query.type as string) || 'instant';
+    const promUrl = process.env.PROMETHEUS_URL || 'http://localhost:9090';
+
+    try {
+        let url: string;
+        if (type === 'range') {
+            const start = req.query.start as string;
+            const end = req.query.end as string;
+            const step = req.query.step as string || '60';
+            url = `${promUrl}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${start}&end=${end}&step=${step}`;
+        } else {
+            url = `${promUrl}/api/v1/query?query=${encodeURIComponent(query)}`;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            return res.status(502).json({ error: `Prometheus returned ${response.status}` });
+        }
+        const data = await response.json();
+        res.json(data);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'PromQL proxy failed');
+        res.status(502).json({ error: 'Failed to reach Prometheus' });
+    }
+});
+
 export default router;
 

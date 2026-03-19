@@ -19,7 +19,7 @@ const logger = createLogger('prometheus-metrics');
 
 // Create a custom registry with OpenMetrics format (required for exemplar support)
 const register = new Registry();
-register.setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
+(register as any).setContentType(Registry.OPENMETRICS_CONTENT_TYPE);
 
 // Collect default Node.js metrics (CPU, memory, event loop, etc.)
 collectDefaultMetrics({

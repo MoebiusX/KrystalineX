@@ -1,0 +1,96 @@
+{
+  "uid": "kx-security-events",
+  "title": "KrystalineX Security Events",
+  "description": "Security event tracking: login attempts, rate limiting, threat severity, SIEM exports",
+  "tags": ["krystalinex", "security", "siem"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "title": "Security Events by Type",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(kx_security_events_total[5m])",
+          "legendFormat": "{{event_type}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Events by Severity",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (severity) (increase(kx_security_events_total[24h]))",
+          "legendFormat": "{{severity}}"
+        }
+      ]
+    },
+    {
+      "title": "Failed Login Attempts",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(kx_logins_total{status=\"failure\"}[5m])",
+          "legendFormat": "failed logins/s"
+        },
+        {
+          "expr": "rate(kx_logins_total{status=\"success\"}[5m])",
+          "legendFormat": "successful logins/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Rate Limiter Hits",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(http_request_errors_total{status_code=\"429\"}[5m])",
+          "legendFormat": "429 rate limited/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Threat Level (HIGH+CRITICAL Events 24h)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(increase(kx_security_events_total{severity=~\"HIGH|CRITICAL\"}[24h])) or vector(0)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Security Event Log",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "{job=\"krystalinex-server\"} |= \"security\" | json",
+          "datasource": { "type": "loki", "uid": "loki" }
+        }
+      ]
+    }
+  ]
+}
