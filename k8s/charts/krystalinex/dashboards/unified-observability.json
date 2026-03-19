@@ -18,6 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -118,7 +119,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rate(http_requests_total[5m])) by (method)",
@@ -214,14 +215,16 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
+          "exemplar": true,
           "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "P95",
           "refId": "A"
         },
         {
+          "exemplar": true,
           "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "P50",
           "refId": "B"
@@ -265,7 +268,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 4,
         "w": 8,
         "x": 0,
         "y": 8
@@ -288,7 +291,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rate(http_request_errors_total[5m])) / sum(rate(http_requests_total[5m])) * 100",
@@ -323,7 +326,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 4,
         "w": 8,
         "x": 8,
         "y": 8
@@ -346,7 +349,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(increase(http_requests_total[1h]))",
@@ -381,7 +384,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 4,
         "w": 8,
         "x": 16,
         "y": 8
@@ -404,12 +407,11 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes",
-          "legendFormat": "{{job}}",
+          "expr": "process_resident_memory_bytes{job=\"node\"}",
           "range": true,
           "refId": "A"
         }
@@ -525,7 +527,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 12
       },
       "id": 43,
       "options": {
@@ -543,7 +545,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -598,7 +600,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 14
+        "y": 12
       },
       "id": 44,
       "options": {
@@ -618,7 +620,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -632,7 +634,7 @@
           "refId": "A"
         }
       ],
-      "title": "?????? High/Critical Events (1h)",
+      "title": "⚠️ High/Critical Events (1h)",
       "type": "stat"
     },
     {
@@ -671,7 +673,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 14
+        "y": 12
       },
       "id": 45,
       "options": {
@@ -691,7 +693,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -742,7 +744,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 18
+        "y": 16
       },
       "id": 46,
       "options": {
@@ -762,7 +764,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -807,7 +809,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 18
+        "y": 16
       },
       "id": 47,
       "options": {
@@ -827,7 +829,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -839,7 +841,7 @@
           "refId": "A"
         }
       ],
-      "title": "??? Successful Logins (1h)",
+      "title": "✅ Successful Logins (1h)",
       "type": "stat"
     },
     {
@@ -848,11 +850,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 20
       },
       "id": 50,
       "panels": [],
-      "title": "??? Order Matcher",
+      "title": "⚡ Order Matcher",
       "type": "row"
     },
     {
@@ -883,7 +885,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 23
+        "y": 21
       },
       "id": 51,
       "options": {
@@ -903,7 +905,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(increase(kx_matcher_orders_processed_total[1h]))",
@@ -979,7 +981,7 @@
         "h": 4,
         "w": 9,
         "x": 6,
-        "y": 23
+        "y": 21
       },
       "id": 52,
       "options": {
@@ -995,7 +997,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rate(kx_matcher_orders_processed_total{status='filled'}[5m])) by (side)",
@@ -1077,7 +1079,7 @@
         "h": 4,
         "w": 9,
         "x": 15,
-        "y": 23
+        "y": 21
       },
       "id": 53,
       "options": {
@@ -1096,7 +1098,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(kx_matcher_order_processing_duration_seconds_bucket[5m])) by (le))",
@@ -1150,7 +1152,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 27
+        "y": 25
       },
       "id": 54,
       "options": {
@@ -1170,7 +1172,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(kx_matcher_slippage_percent_bucket[5m])) by (le))",
@@ -1246,7 +1248,7 @@
         "h": 4,
         "w": 18,
         "x": 6,
-        "y": 27
+        "y": 25
       },
       "id": 55,
       "options": {
@@ -1262,7 +1264,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(kx_matcher_slippage_percent_bucket[5m])) by (le))",
@@ -1284,11 +1286,11 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 29
       },
       "id": 1,
       "panels": [],
-      "title": "🖥??? System Health",
+      "title": "🖥️ System Health",
       "type": "row"
     },
     {
@@ -1329,7 +1331,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 32
+        "y": 30
       },
       "id": 2,
       "options": {
@@ -1349,7 +1351,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
@@ -1397,7 +1399,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 32
+        "y": 30
       },
       "id": 3,
       "options": {
@@ -1417,7 +1419,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
@@ -1465,7 +1467,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 32
+        "y": 30
       },
       "id": 4,
       "options": {
@@ -1485,7 +1487,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -1525,7 +1527,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 32
+        "y": 30
       },
       "id": 5,
       "options": {
@@ -1545,7 +1547,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "count(up == 1)",
@@ -1561,7 +1563,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 34
       },
       "id": 20,
       "panels": [],
@@ -1605,7 +1607,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 37
+        "y": 35
       },
       "id": 21,
       "options": {
@@ -1625,7 +1627,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "pg_stat_activity_count{datname=\"crypto_exchange\", state=\"active\"}",
@@ -1701,7 +1703,7 @@
         "h": 4,
         "w": 9,
         "x": 6,
-        "y": 37
+        "y": 35
       },
       "id": 22,
       "options": {
@@ -1717,7 +1719,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "rate(pg_stat_database_tup_inserted{datname=\"crypto_exchange\"}[5m])",
@@ -1766,7 +1768,7 @@
         "h": 4,
         "w": 9,
         "x": 15,
-        "y": 37
+        "y": 35
       },
       "id": 23,
       "options": {
@@ -1786,7 +1788,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "pg_database_size_bytes{datname=\"crypto_exchange\"}",
@@ -1802,9 +1804,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 39
       },
-      "id": 30,
+      "id": 66,
       "panels": [],
       "title": "🐰 RabbitMQ",
       "type": "row"
@@ -1845,7 +1847,7 @@
         "h": 4,
         "w": 8,
         "x": 0,
-        "y": 42
+        "y": 40
       },
       "id": 31,
       "options": {
@@ -1865,7 +1867,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rabbitmq_queue_messages)",
@@ -1941,7 +1943,7 @@
         "h": 4,
         "w": 16,
         "x": 8,
-        "y": 42
+        "y": 40
       },
       "id": 32,
       "options": {
@@ -1957,7 +1959,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "rate(rabbitmq_queue_messages_published_total[5m])",
@@ -1979,7 +1981,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 44
       },
       "id": 40,
       "panels": [],
@@ -1999,7 +2001,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 45
       },
       "id": 41,
       "options": {
@@ -2012,13 +2014,15 @@
         "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
-        "unwrappedColumns": false,
         "wrapLogMessage": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
+          "direction": "backward",
+          "editorMode": "code",
           "expr": "{namespace=\"krystalinex\"} |= ``",
+          "queryType": "range",
           "refId": "A"
         }
       ],
@@ -2063,14 +2067,14 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 55
+        "y": 53
       },
       "id": 42,
       "options": {
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "limit": 20,
@@ -2088,7 +2092,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 61
       },
       "id": 60,
       "panels": [],
@@ -2161,7 +2165,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 62
       },
       "id": 61,
       "options": {
@@ -2177,7 +2181,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(increase(kx_llm_events_by_severity_total{severity=\"sev1\"}[5m]))",
@@ -2264,7 +2268,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 62
       },
       "id": 65,
       "options": {
@@ -2280,7 +2284,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rate(kx_llm_analysis_total{status=\"success\"}[5m])) by (use_case)",
@@ -2357,7 +2361,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 70
+        "y": 68
       },
       "id": 63,
       "options": {
@@ -2376,7 +2380,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(kx_llm_analysis_duration_seconds_bucket[5m])) by (le))",
@@ -2429,7 +2433,7 @@
         "h": 6,
         "w": 6,
         "x": 12,
-        "y": 70
+        "y": 68
       },
       "id": 62,
       "options": {
@@ -2449,7 +2453,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "kx_llm_queue_depth",
@@ -2495,7 +2499,7 @@
         "h": 6,
         "w": 6,
         "x": 18,
-        "y": 70
+        "y": 68
       },
       "id": 64,
       "options": {
@@ -2515,7 +2519,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.0",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -2545,9 +2549,8 @@
     "to": "now"
   },
   "timepicker": {},
-  "timezone": "browser",
+  "timezone": "",
   "title": "KrystalineX Unified Observability 2026",
   "uid": "krystalinex-unified",
-  "version": 8,
-  "weekStart": ""
+  "version": 3
 }
