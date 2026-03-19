@@ -124,11 +124,13 @@
       "targets": [
         {
           "expr": "slo:http_request_duration:p95_5m * 1000",
-          "legendFormat": "P95"
+          "legendFormat": "P95",
+          "exemplar": true
         },
         {
           "expr": "slo:http_request_duration:p99_5m * 1000",
-          "legendFormat": "P99"
+          "legendFormat": "P99",
+          "exemplar": true
         }
       ],
       "fieldConfig": {
