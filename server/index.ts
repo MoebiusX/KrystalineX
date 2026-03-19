@@ -137,6 +137,10 @@ app.use(createUserContextMiddleware());
   app.use('/api/v1/monitor', monitorRoutes);
   app.use('/api/monitor', monitorRoutes);
 
+  // Register auto-remediation webhook (Alertmanager → automated safe actions)
+  const autoRemediationRoutes = (await import('./monitor/auto-remediation')).default;
+  app.use('/api/v1/monitor', autoRemediationRoutes);
+
   // Register public transparency routes (unauthenticated)
   app.use('/api/v1/public', publicRoutes);
 
