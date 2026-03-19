@@ -37,6 +37,7 @@ spec:
             - '--storage.tsdb.path=/prometheus'
             - '--storage.tsdb.no-lockfile'
             - '--web.external-url=/prometheus/'
+            - '--enable-feature=exemplar-storage'
           ports:
             - name: http
               containerPort: 9090

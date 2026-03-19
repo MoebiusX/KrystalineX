@@ -283,9 +283,9 @@
           "exemplar": true
         }
       ],
-      "title": "Request Latency with Exemplars (click dot → Jaeger trace)",
+      "title": "Request Latency with Exemplars (click dot → Grafana trace)",
       "type": "timeseries",
-      "description": "Each dot is an exemplar — a real request with a traceID. Click to open the full distributed trace in Jaeger."
+      "description": "Each dot is an exemplar — a real request with a traceID. Click to open the full distributed trace in Grafana's built-in trace viewer."
     },
     {
       "datasource": {

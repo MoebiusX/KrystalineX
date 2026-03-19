@@ -212,4 +212,61 @@ describe('Cap 8A: CI Configuration Validation', () => {
             expect(content).toContain('security:secrets');
         });
     });
+
+    describe('Prometheus Exemplar Storage', () => {
+        it('should enable exemplar-storage feature in Docker Compose', () => {
+            const composePath = path.resolve(__dirname, '../../docker-compose.yml');
+            const content = fs.readFileSync(composePath, 'utf-8');
+            expect(content).toContain('--enable-feature=exemplar-storage');
+        });
+
+        it('should enable exemplar-storage feature in K8s deployment', () => {
+            const k8sPath = path.resolve(
+                __dirname,
+                '../../k8s/charts/krystalinex/templates/deployment-prometheus.yaml'
+            );
+            const content = fs.readFileSync(k8sPath, 'utf-8');
+            expect(content).toContain('--enable-feature=exemplar-storage');
+        });
+    });
+
+    describe('Grafana Datasource Exemplar Linking', () => {
+        it('Docker datasource should have exemplarTraceIdDestinations on Prometheus', () => {
+            const dsPath = path.join(CONFIG_DIR, 'grafana/provisioning/datasources/datasources.yaml');
+            const content = fs.readFileSync(dsPath, 'utf-8');
+            const parsed = yaml.load(content) as any;
+            const promDs = parsed.datasources.find((d: any) => d.type === 'prometheus');
+            expect(promDs.jsonData.exemplarTraceIdDestinations).toBeDefined();
+            expect(promDs.jsonData.exemplarTraceIdDestinations[0].name).toBe('traceID');
+            expect(promDs.jsonData.exemplarTraceIdDestinations[0].datasourceUid).toBe('jaeger');
+        });
+
+        it('Docker Jaeger datasource should have nodeGraph enabled', () => {
+            const dsPath = path.join(CONFIG_DIR, 'grafana/provisioning/datasources/datasources.yaml');
+            const content = fs.readFileSync(dsPath, 'utf-8');
+            const parsed = yaml.load(content) as any;
+            const jaegerDs = parsed.datasources.find((d: any) => d.type === 'jaeger');
+            expect(jaegerDs.jsonData.nodeGraph).toBeDefined();
+            expect(jaegerDs.jsonData.nodeGraph.enabled).toBe(true);
+        });
+
+        it('K8s datasource should have exemplarTraceIdDestinations on Prometheus', () => {
+            const k8sPath = path.resolve(
+                __dirname,
+                '../../k8s/charts/krystalinex/templates/configmap-grafana-datasources.yaml'
+            );
+            const content = fs.readFileSync(k8sPath, 'utf-8');
+            expect(content).toContain('exemplarTraceIdDestinations');
+            expect(content).toContain('traceID');
+        });
+
+        it('K8s Jaeger datasource should have nodeGraph enabled', () => {
+            const k8sPath = path.resolve(
+                __dirname,
+                '../../k8s/charts/krystalinex/templates/configmap-grafana-datasources.yaml'
+            );
+            const content = fs.readFileSync(k8sPath, 'utf-8');
+            expect(content).toContain('nodeGraph');
+        });
+    });
 });

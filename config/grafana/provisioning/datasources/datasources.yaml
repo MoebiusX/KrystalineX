@@ -42,9 +42,15 @@ datasources:
     url: http://jaeger:16686
     editable: false
     jsonData:
+      nodeGraph:
+        enabled: true
       tracesToLogs:
         datasourceUid: loki
         filterByTraceID: true
         spanStartTimeShift: "-1h"
         spanEndTimeShift: "1h"
         lokiSearch: true
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"

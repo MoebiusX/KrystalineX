@@ -153,6 +153,8 @@ describe('Cap 12: Grafana Dashboard Validation', () => {
                 (t: any) => t.exemplar === true
             );
             expect(allExemplarsEnabled).toBe(true);
+            // Should reference Grafana trace viewer, not external Jaeger
+            expect((exemplarPanel as any).description).toContain('Grafana');
         });
 
         it('SLO dashboard latency panel should have exemplar: true', () => {

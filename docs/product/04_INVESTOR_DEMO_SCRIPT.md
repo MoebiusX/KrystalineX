@@ -190,15 +190,15 @@ curl -s https://www.krystaline.io/api/v1/monitor/model | jq '.model'
 
 ### 4C: Exemplars — Metrics Linked to Traces
 
-> **Action:** Switch to Tab 4 (Grafana). Open the SLO Dashboard or the default dashboard showing `http_request_duration_seconds`.
+> **Action:** Switch to Tab 4 (Grafana). Open the Unified Observability Dashboard and find the "Request Latency with Exemplars" panel.
 
-> "Here's our Grafana dashboard. See these dots on the latency histogram? Those are called **exemplars**. Each dot is a real request, and each one contains a trace ID."
+> "Here's our Grafana dashboard. See these dots on the latency panel? Those are called **exemplars**. Each dot is a real request, and each one contains a trace ID."
 
-> *[Click an exemplar dot → opens Jaeger trace]*
+> *[Click an exemplar dot → trace opens inline in Grafana]*
 
-> "I just clicked a single data point on a graph, and it took me directly to the full distributed trace for that specific request. This is the bridge between metrics and traces — you can go from 'our P99 latency spiked' to 'here's exactly which request was slow and why' in one click."
+> "I just clicked a single data point on a graph, and Grafana opened the full distributed trace — right here, inline, no need to leave the dashboard. This is Grafana's built-in trace viewer using our Jaeger datasource."
 >
-> "Most monitoring systems give you metrics OR traces. We give you both, linked together, with exemplars providing the bridge."
+> "Most monitoring systems give you metrics OR traces. We give you both, linked together, with exemplars providing the bridge. And because our Jaeger datasource has node graph enabled, you can also see a visual map of which services talked to which."
 
 ### 4D: Logs with Trace Context
 
@@ -506,19 +506,19 @@ GET /api/public/zk/verify/:tradeId → Server-side verification (or do it yourse
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   PROOF OF OBSERVABILITY™                        │
+│                   PROOF OF OBSERVABILITY™                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌──────┐│
-│  │TRACING  │  │ANOMALY  │  │  LLM    │  │   ZK    │  │ SLO  ││
-│  │         │  │DETECTION│  │  RCA    │  │ PROOFS  │  │BUDGET││
-│  │17 spans │  │Welford  │  │Llama3.2 │  │Groth16  │  │99.9% ││
-│  │per trade│  │168 hour │  │LoRA     │  │Poseidon │  │Burn  ││
-│  │W3C ctx  │  │buckets  │  │tuned    │  │hash     │  │rate  ││
-│  │exemplars│  │SEV 1-5  │  │streaming│  │BN128    │  │alerts││
-│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘  └──┬───┘│
-│       │            │            │            │           │     │
-│       └────────────┴─────┬──────┴────────────┴───────────┘     │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌──────┐   │
+│  │TRACING  │  │ANOMALY  │  │  LLM    │  │   ZK    │  │ SLO  │   │
+│  │         │  │DETECTION│  │  RCA    │  │ PROOFS  │  │BUDGET│   │
+│  │17 spans │  │Welford  │  │Llama3.2 │  │Groth16  │  │99.9% │   │
+│  │per trade│  │168 hour │  │LoRA     │  │Poseidon │  │Burn  │   │
+│  │W3C ctx  │  │buckets  │  │tuned    │  │hash     │  │rate  │   │
+│  │exemplars│  │SEV 1-5  │  │streaming│  │BN128    │  │alerts│   │
+│  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘  └───┬──┘   │
+│       │            │            │            │           │      │
+│       └────────────┴─────┬──────┴────────────┴───────────┘      │
 │                          │                                      │
 │              ┌───────────┴───────────┐                          │
 │              │   COMPLETE TRUST      │                          │
