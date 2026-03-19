@@ -2240,7 +2240,7 @@
         {
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{project=\"krystalinex\"} |= ``",
+          "expr": "{project=\"krystalinex\", service=~\"app-database|rabbitmq|kong-gateway|alertmanager\"} |= ``",
           "queryType": "range",
           "refId": "A"
         }

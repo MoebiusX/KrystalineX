@@ -18,53 +18,54 @@ groups:
     interval: 30s
     rules:
       # 5-minute error ratio (for short-window burn rate)
+      # or vector(0) ensures a result of 0 when no 5xx errors exist
       - record: slo:http_requests:error_ratio_5m
         expr: |
-          sum(rate(http_request_errors_total{status_code=~"5.."}[5m]))
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[5m])) or vector(0))
           /
-          sum(rate(http_requests_total[5m]))
+          (sum(rate(http_requests_total[5m])) > 0)
 
       # 30-minute error ratio
       - record: slo:http_requests:error_ratio_30m
         expr: |
-          sum(rate(http_request_errors_total{status_code=~"5.."}[30m]))
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[30m])) or vector(0))
           /
-          sum(rate(http_requests_total[30m]))
+          (sum(rate(http_requests_total[30m])) > 0)
 
       # 1-hour error ratio
       - record: slo:http_requests:error_ratio_1h
         expr: |
-          sum(rate(http_request_errors_total{status_code=~"5.."}[1h]))
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[1h])) or vector(0))
           /
-          sum(rate(http_requests_total[1h]))
+          (sum(rate(http_requests_total[1h])) > 0)
 
       # 2-hour error ratio
       - record: slo:http_requests:error_ratio_2h
         expr: |
-          sum(rate(http_request_errors_total{status_code=~"5.."}[2h]))
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[2h])) or vector(0))
           /
-          sum(rate(http_requests_total[2h]))
+          (sum(rate(http_requests_total[2h])) > 0)
 
       # 6-hour error ratio
       - record: slo:http_requests:error_ratio_6h
         expr: |
-          sum(rate(http_request_errors_total{status_code=~"5.."}[6h]))
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[6h])) or vector(0))
           /
-          sum(rate(http_requests_total[6h]))
+          (sum(rate(http_requests_total[6h])) > 0)
 
       # 1-day error ratio
       - record: slo:http_requests:error_ratio_1d
         expr: |
-          sum(rate(http_request_errors_total{status_code=~"5.."}[1d]))
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[1d])) or vector(0))
           /
-          sum(rate(http_requests_total[1d]))
+          (sum(rate(http_requests_total[1d])) > 0)
 
       # 3-day error ratio
       - record: slo:http_requests:error_ratio_3d
         expr: |
-          sum(rate(http_request_errors_total{status_code=~"5.."}[3d]))
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[3d])) or vector(0))
           /
-          sum(rate(http_requests_total[3d]))
+          (sum(rate(http_requests_total[3d])) > 0)
 
   # ============================================
   # LATENCY RECORDING RULES
