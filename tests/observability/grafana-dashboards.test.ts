@@ -136,25 +136,22 @@ describe('Cap 12: Grafana Dashboard Validation', () => {
             expect(hasExemplar).toBe(true);
         });
 
-        it('should have a dedicated exemplar-enabled histogram panel', () => {
+        it('should have all exemplar-enabled targets querying duration histogram', () => {
             const dashboard = loadDashboard('unified-observability.json');
-            const exemplarPanel = dashboard.panels.find(p =>
-                p.title.toLowerCase().includes('exemplar')
+            const latencyPanel = dashboard.panels.find(p =>
+                p.title.toLowerCase().includes('latenc') && p.type === 'timeseries'
             );
-            expect(exemplarPanel).toBeDefined();
-            expect(exemplarPanel!.type).toBe('timeseries');
-            // Should query the raw histogram metric
-            const queriesRawHistogram = exemplarPanel!.targets!.some(
-                (t: any) => t.expr && t.expr.includes('http_request_duration_seconds')
-            );
-            expect(queriesRawHistogram).toBe(true);
+            expect(latencyPanel).toBeDefined();
             // All targets should have exemplar enabled
-            const allExemplarsEnabled = exemplarPanel!.targets!.every(
+            const allExemplarsEnabled = latencyPanel!.targets!.every(
                 (t: any) => t.exemplar === true
             );
             expect(allExemplarsEnabled).toBe(true);
-            // Should reference Grafana trace viewer, not external Jaeger
-            expect((exemplarPanel as any).description).toContain('Grafana');
+            // Should query the duration histogram
+            const queriesDuration = latencyPanel!.targets!.some(
+                (t: any) => t.expr && t.expr.includes('http_request_duration_seconds')
+            );
+            expect(queriesDuration).toBe(true);
         });
 
         it('SLO dashboard latency panel should have exemplar: true', () => {

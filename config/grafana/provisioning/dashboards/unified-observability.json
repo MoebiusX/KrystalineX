@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 4,
+  "id": 2,
   "links": [],
   "panels": [
     {
@@ -68,6 +68,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -118,7 +119,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rate(http_requests_total[5m])) by (method)",
@@ -163,6 +164,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -213,79 +215,23 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
+          "exemplar": true,
           "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "P95",
-          "refId": "A",
-          "exemplar": true
+          "refId": "A"
         },
         {
+          "exemplar": true,
           "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "P50",
-          "refId": "B",
-          "exemplar": true
+          "refId": "B"
         }
       ],
       "title": "Response Latency (P50 / P95)",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "unit": "s",
-          "custom": {
-            "drawStyle": "points",
-            "pointSize": 5,
-            "showPoints": "always"
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "id": 30,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "P99 Latency",
-          "refId": "A",
-          "exemplar": true
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "P95 Latency",
-          "refId": "B",
-          "exemplar": true
-        }
-      ],
-      "title": "Request Latency with Exemplars (click dot → Grafana trace)",
-      "type": "timeseries",
-      "description": "Each dot is an exemplar — a real request with a traceID. Click to open the full distributed trace in Grafana's built-in trace viewer."
     },
     {
       "datasource": {
@@ -345,7 +291,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rate(http_request_errors_total[5m])) / sum(rate(http_requests_total[5m])) * 100",
@@ -403,7 +349,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(increase(http_requests_total[1h]))",
@@ -461,7 +407,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -507,6 +453,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -598,7 +545,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -673,7 +620,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -746,7 +693,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -817,7 +764,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -882,7 +829,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -958,7 +905,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(increase(kx_matcher_orders_processed_total[1h]))",
@@ -1002,6 +949,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1049,7 +997,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rate(kx_matcher_orders_processed_total{status='filled'}[5m])) by (side)",
@@ -1099,6 +1047,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1149,7 +1098,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(kx_matcher_order_processing_duration_seconds_bucket[5m])) by (le))",
@@ -1223,7 +1172,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.50, sum(rate(kx_matcher_slippage_percent_bucket[5m])) by (le))",
@@ -1267,6 +1216,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1314,7 +1264,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(kx_matcher_slippage_percent_bucket[5m])) by (le))",
@@ -1401,7 +1351,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
@@ -1469,7 +1419,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
@@ -1537,7 +1487,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -1597,7 +1547,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "count(up == 1)",
@@ -1677,7 +1627,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "pg_stat_activity_count{datname=\"crypto_exchange\", state=\"active\"}",
@@ -1721,6 +1671,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1768,7 +1719,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "rate(pg_stat_database_tup_inserted{datname=\"crypto_exchange\"}[5m])",
@@ -1837,7 +1788,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "pg_database_size_bytes{datname=\"crypto_exchange\"}",
@@ -1855,7 +1806,7 @@
         "x": 0,
         "y": 39
       },
-      "id": 30,
+      "id": 66,
       "panels": [],
       "title": "🐰 RabbitMQ",
       "type": "row"
@@ -1916,7 +1867,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rabbitmq_queue_messages)",
@@ -1960,6 +1911,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -2007,7 +1959,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "rate(rabbitmq_queue_messages_published_total[5m])",
@@ -2058,15 +2010,19 @@
         "enableLogDetails": true,
         "prettifyLogMessage": true,
         "showCommonLabels": false,
+        "showControls": false,
         "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
+          "direction": "backward",
+          "editorMode": "code",
           "expr": "{namespace=\"krystalinex\"} |= ``",
+          "queryType": "range",
           "refId": "A"
         }
       ],
@@ -2084,6 +2040,9 @@
             "align": "auto",
             "cellOptions": {
               "type": "auto"
+            },
+            "footer": {
+              "reducers": []
             },
             "inspect": false
           },
@@ -2113,17 +2072,9 @@
       "id": 42,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
         "showHeader": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "limit": 20,
@@ -2182,6 +2133,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -2229,7 +2181,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(increase(kx_llm_events_by_severity_total{severity=\"sev1\"}[5m]))",
@@ -2284,6 +2236,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -2331,7 +2284,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "sum(rate(kx_llm_analysis_total{status=\"success\"}[5m])) by (use_case)",
@@ -2376,6 +2329,7 @@
               "type": "linear"
             },
             "showPoints": "never",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -2426,7 +2380,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(kx_llm_analysis_duration_seconds_bucket[5m])) by (le))",
@@ -2499,7 +2453,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "expr": "kx_llm_queue_depth",
@@ -2565,7 +2519,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.3.3",
       "targets": [
         {
           "editorMode": "code",
@@ -2581,7 +2535,7 @@
   ],
   "preload": false,
   "refresh": "30s",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [
     "krystalinex",
     "observability",
@@ -2598,5 +2552,5 @@
   "timezone": "",
   "title": "KrystalineX Unified Observability 2026",
   "uid": "krystalinex-unified",
-  "version": 1
+  "version": 3
 }
