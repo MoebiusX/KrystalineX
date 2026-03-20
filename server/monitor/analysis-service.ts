@@ -115,9 +115,9 @@ export class AnalysisService {
     ): Promise<AnalysisResponse> {
         const prompt = this.buildPrompt(anomaly, fullTrace, metrics);
 
-        // Add 120-second timeout to accommodate model cold starts
+        // 300s timeout — F16 model on CPU takes ~4-5 minutes per generation
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000);
+        const timeoutId = setTimeout(() => controller.abort(), 300000);
 
         try {
             const response = await fetch(`${OLLAMA_URL}/api/generate`, {
@@ -160,7 +160,7 @@ export class AnalysisService {
         } catch (error: unknown) {
             clearTimeout(timeoutId);
             if (error instanceof Error && error.name === 'AbortError') {
-                throw new Error('Ollama request timed out after 120 seconds');
+                throw new Error('Ollama request timed out after 300 seconds');
             }
             throw error;
         }

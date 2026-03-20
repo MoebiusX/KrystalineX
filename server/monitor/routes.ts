@@ -104,8 +104,8 @@ router.get('/history', async (req, res) => {
  * Trigger LLM analysis for a trace
  */
 router.post('/analyze', async (req, res) => {
-    // Override global 30s timeout — Ollama cold starts can take 2+ minutes
-    res.setTimeout(150000);
+    // Override global 30s timeout — F16 model on CPU takes ~4-5 minutes
+    res.setTimeout(330000);
 
     const { traceId, anomalyId } = req.body;
 
