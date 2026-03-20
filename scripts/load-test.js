@@ -54,13 +54,88 @@ const API_URL     = `${BASE_URL}/api/v1`;
 
 // ── Database ──────────────────────────────────────────────────────────────
 
+import { execSync, spawn } from 'child_process';
+
+const isRemote = config.isRemote;
+const K8S_DB_LOCAL_PORT = 15433;
+
 const dbConfig = {
     host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5433'),
+    port: isRemote ? K8S_DB_LOCAL_PORT : parseInt(process.env.DB_PORT || '5433'),
     database: process.env.DB_NAME || 'crypto_exchange',
     user: process.env.DB_USER || 'exchange',
-    password: process.env.DB_PASSWORD,
+    password: isRemote ? undefined : process.env.DB_PASSWORD,
 };
+
+// Port-forward K8s Postgres when running in remote mode
+let portForwardProcess = null;
+
+async function startK8sPortForward() {
+    if (!isRemote) return;
+    console.log(`\n🔗 Port-forwarding K8s PostgreSQL to localhost:${K8S_DB_LOCAL_PORT}...`);
+
+    // Use a unique remote port to avoid conflicts with other port-forwards
+    const remotePort = 15432 + Math.floor(Math.random() * 100);
+
+    portForwardProcess = spawn('ssh', [
+        '-L', `${K8S_DB_LOCAL_PORT}:localhost:${remotePort}`,
+        'carlos@kube',
+        'kubectl', 'port-forward', `svc/kx-krystalinex-postgresql`, `${remotePort}:5432`,
+        '-n', 'krystalinex'
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+    // Wait for port-forward to be ready
+    let ready = false;
+    await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+            if (!ready) console.error('   ⚠️  Port-forward timed out after 8s');
+            resolve();
+        }, 8000);
+        portForwardProcess.stdout?.on('data', (data) => {
+            const msg = data.toString();
+            if (msg.includes('Forwarding')) {
+                ready = true;
+                clearTimeout(timeout);
+                setTimeout(resolve, 500);
+            }
+        });
+        portForwardProcess.stderr?.on('data', (data) => {
+            const msg = data.toString().trim();
+            if (msg.includes('error') || msg.includes('unable')) {
+                console.error(`   ❌ Port-forward error: ${msg}`);
+            }
+        });
+        portForwardProcess.on('error', (err) => {
+            console.error(`   ❌ SSH spawn failed: ${err.message}`);
+            portForwardProcess = null;
+            clearTimeout(timeout);
+            resolve();
+        });
+    });
+
+    // Fetch DB password from K8s secret
+    if (!dbConfig.password) {
+        try {
+            const pw = execSync(
+                'ssh carlos@kube "kubectl get secret krystalinex-db-secrets -n krystalinex -o jsonpath=\'{.data.password}\' | base64 -d"',
+                { encoding: 'utf8', timeout: 10000 }
+            ).trim();
+            dbConfig.password = pw;
+        } catch {
+            console.error('   ⚠️  Could not fetch K8s DB password from secret');
+        }
+    }
+    if (ready) {
+        console.log('   ✅ SSH tunnel established');
+    }
+}
+
+function stopK8sPortForward() {
+    if (portForwardProcess) {
+        portForwardProcess.kill();
+        portForwardProcess = null;
+    }
+}
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 
@@ -161,6 +236,11 @@ async function seedUsers(pool, count) {
 
         if (existingCount >= count) {
             console.log(`   ✅ ${existingCount} load-test users already exist`);
+            // Ensure password hashes match this run's hash
+            await client.query(
+                "UPDATE users SET password_hash = $1 WHERE email LIKE 'loadtest-%@load.krystaline.io'",
+                [passwordHash]
+            );
             // Fetch their IDs
             const result = await client.query(
                 "SELECT id, email FROM users WHERE email LIKE 'loadtest-%@load.krystaline.io' ORDER BY email LIMIT $1",
@@ -389,6 +469,9 @@ async function main() {
         process.exit(1);
     }
 
+    // Port-forward K8s DB if remote
+    await startK8sPortForward();
+
     // Seed users
     const pool = new Pool(dbConfig);
     let users;
@@ -426,6 +509,9 @@ async function main() {
 
     await Promise.all(vuPromises);
     clearInterval(liveInterval);
+
+    // Cleanup
+    stopK8sPortForward();
 
     // Final report
     printReport();
