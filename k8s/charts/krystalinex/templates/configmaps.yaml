@@ -622,39 +622,46 @@ data:
         rules:
           - record: slo:http_requests:error_ratio_5m
             expr: |
-              sum(rate(http_request_errors_total{status_code=~"5.."}[5m]))
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[5m])) or vector(0))
               /
-              sum(rate(http_requests_total[5m]))
+              (sum(rate(http_requests_total[5m])) > 0)
+              or vector(0)
           - record: slo:http_requests:error_ratio_30m
             expr: |
-              sum(rate(http_request_errors_total{status_code=~"5.."}[30m]))
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[30m])) or vector(0))
               /
-              sum(rate(http_requests_total[30m]))
+              (sum(rate(http_requests_total[30m])) > 0)
+              or vector(0)
           - record: slo:http_requests:error_ratio_1h
             expr: |
-              sum(rate(http_request_errors_total{status_code=~"5.."}[1h]))
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[1h])) or vector(0))
               /
-              sum(rate(http_requests_total[1h]))
+              (sum(rate(http_requests_total[1h])) > 0)
+              or vector(0)
           - record: slo:http_requests:error_ratio_2h
             expr: |
-              sum(rate(http_request_errors_total{status_code=~"5.."}[2h]))
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[2h])) or vector(0))
               /
-              sum(rate(http_requests_total[2h]))
+              (sum(rate(http_requests_total[2h])) > 0)
+              or vector(0)
           - record: slo:http_requests:error_ratio_6h
             expr: |
-              sum(rate(http_request_errors_total{status_code=~"5.."}[6h]))
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[6h])) or vector(0))
               /
-              sum(rate(http_requests_total[6h]))
+              (sum(rate(http_requests_total[6h])) > 0)
+              or vector(0)
           - record: slo:http_requests:error_ratio_1d
             expr: |
-              sum(rate(http_request_errors_total{status_code=~"5.."}[1d]))
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[1d])) or vector(0))
               /
-              sum(rate(http_requests_total[1d]))
+              (sum(rate(http_requests_total[1d])) > 0)
+              or vector(0)
           - record: slo:http_requests:error_ratio_3d
             expr: |
-              sum(rate(http_request_errors_total{status_code=~"5.."}[3d]))
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[3d])) or vector(0))
               /
-              sum(rate(http_requests_total[3d]))
+              (sum(rate(http_requests_total[3d])) > 0)
+              or vector(0)
 
       - name: slo:latency
         interval: 30s
@@ -663,17 +670,26 @@ data:
             expr: |
               sum(rate(http_request_duration_seconds_bucket{le="0.5"}[5m]))
               /
-              sum(rate(http_request_duration_seconds_count[5m]))
+              (sum(rate(http_request_duration_seconds_count[5m])) > 0)
+              or vector(1)
           - record: slo:http_request_duration:ratio_below_500ms_1h
             expr: |
               sum(rate(http_request_duration_seconds_bucket{le="0.5"}[1h]))
               /
-              sum(rate(http_request_duration_seconds_count[1h]))
+              (sum(rate(http_request_duration_seconds_count[1h])) > 0)
+              or vector(1)
           - record: slo:http_request_duration:ratio_below_500ms_1d
             expr: |
               sum(rate(http_request_duration_seconds_bucket{le="0.5"}[1d]))
               /
-              sum(rate(http_request_duration_seconds_count[1d]))
+              (sum(rate(http_request_duration_seconds_count[1d])) > 0)
+              or vector(1)
+          - record: slo:http_request_duration:ratio_below_2s_5m
+            expr: |
+              sum(rate(http_request_duration_seconds_bucket{le="2"}[5m]))
+              /
+              (sum(rate(http_request_duration_seconds_count[5m])) > 0)
+              or vector(1)
           - record: slo:http_request_duration:p95_5m
             expr: |
               histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))

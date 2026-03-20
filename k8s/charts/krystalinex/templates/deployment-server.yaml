@@ -82,6 +82,8 @@ spec:
               value: "http://{{ include "krystalinex.fullname" . }}-ollama:11434"
             - name: PROMETHEUS_URL
               value: "http://{{ include "krystalinex.fullname" . }}-prometheus:9090/prometheus"
+            - name: LOKI_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-loki:3100"
             - name: OLLAMA_MODEL
               value: "XavierThibaudon/anomaly-analyzer"
             {{- if .Values.secrets.mailgunApiKey }}
