@@ -137,17 +137,42 @@ class TransparencyService {
       const hasDegraded = serviceStatuses.includes('degraded');
       const overallStatus = hasOutage ? 'down' : hasDegraded ? 'degraded' : 'operational';
 
-      // Performance metrics - only use HTTP request spans (user-facing latency)
-      const baselines = await historyStore.getBaselines();
-      const httpMethods = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']);
+      // Performance metrics - query Prometheus histogram for real HTTP latency
+      // Falls back to span baselines (HTTP-only) if Prometheus is unavailable
       let p50 = 0, p95 = 0, p99 = 0;
 
-      if (baselines.length > 0) {
+      try {
+        const prometheusUrl = config.env === 'production'
+          ? 'http://kx-krystalinex-prometheus:9090'
+          : 'http://localhost:9090';
+
+        const quantiles = [0.5, 0.95, 0.99];
+
+        const results = await Promise.all(
+          quantiles.map(async (q) => {
+            const query = `histogram_quantile(${q}, sum(rate(http_request_duration_seconds_bucket{job="krystalinex-server"}[1h])) by (le))`;
+            const url = `${prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`;
+            const resp = await fetch(url, { signal: AbortSignal.timeout(3000) });
+            const data = await resp.json() as { data?: { result?: Array<{ value?: [number, string] }> } };
+            const val = data?.data?.result?.[0]?.value?.[1];
+            if (!val || val === 'NaN' || val === '+Inf') return 0;
+            return Math.round(parseFloat(val) * 1000); // seconds → ms
+          })
+        );
+
+        [p50, p95, p99] = results;
+      } catch {
+        // Prometheus unavailable — fall back to span baselines
+        // Only use kx-exchange HTTP spans with 100+ samples (skip cold-start data)
+        logger.debug('Prometheus unavailable for performance metrics, using span baselines');
+        const baselines = await historyStore.getBaselines();
         let totalSamples = 0;
         let weightedP50 = 0, weightedP95 = 0, weightedP99 = 0;
+        const httpMethods = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']);
+        const MIN_SAMPLES = 100;
 
         for (const b of baselines) {
-          if (b.sampleCount > 0 && httpMethods.has(b.operation)) {
+          if (b.sampleCount >= MIN_SAMPLES && httpMethods.has(b.operation) && b.service === 'kx-exchange') {
             totalSamples += b.sampleCount;
             weightedP50 += (b.p50 || 0) * b.sampleCount;
             weightedP95 += (b.p95 || 0) * b.sampleCount;
