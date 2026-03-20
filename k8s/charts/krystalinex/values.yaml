@@ -181,10 +181,10 @@ jaeger:
   resources:
     limits:
       cpu: 1000m
-      memory: 2Gi
+      memory: 4Gi
     requests:
       cpu: 100m
-      memory: 1Gi
+      memory: 2Gi
 
 otelCollector:
   enabled: true
