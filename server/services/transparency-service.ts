@@ -142,9 +142,7 @@ class TransparencyService {
       let p50 = 0, p95 = 0, p99 = 0;
 
       try {
-        const prometheusUrl = config.env === 'production'
-          ? 'http://kx-krystalinex-prometheus:9090'
-          : 'http://localhost:9090';
+        const prometheusUrl = config.observability.prometheusUrl;
 
         const quantiles = [0.5, 0.95, 0.99];
 
