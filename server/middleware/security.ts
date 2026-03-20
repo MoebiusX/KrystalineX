@@ -16,15 +16,22 @@ const logger = createLogger('security');
 
 // ============================================
 // RATE LIMITING
+// Defaults are safe for production. Override via env vars for load testing.
 // ============================================
+
+const RATE_LIMIT_GENERAL = parseInt(process.env.RATE_LIMIT_GENERAL || '300', 10);
+const RATE_LIMIT_AUTH = parseInt(process.env.RATE_LIMIT_AUTH || '60', 10);
+const RATE_LIMIT_SENSITIVE = parseInt(process.env.RATE_LIMIT_SENSITIVE || '15', 10);
+
+logger.info({ general: RATE_LIMIT_GENERAL, auth: RATE_LIMIT_AUTH, sensitive: RATE_LIMIT_SENSITIVE }, 'Rate limits configured');
 
 /**
  * General API rate limiter
- * 300 requests per minute per IP
+ * Default: 300 requests per minute per IP (override: RATE_LIMIT_GENERAL)
  */
 export const generalRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 300, // 300 requests per minute
+  max: RATE_LIMIT_GENERAL,
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many requests',
@@ -53,11 +60,11 @@ export const generalRateLimiter = rateLimit({
 
 /**
  * Strict rate limiter for authentication endpoints
- * 60 requests per minute per IP (prevents brute force)
+ * Default: 60 requests per minute per IP (override: RATE_LIMIT_AUTH)
  */
 export const authRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 60, // 60 requests per minute
+  max: RATE_LIMIT_AUTH,
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many authentication attempts',
@@ -86,11 +93,11 @@ export const authRateLimiter = rateLimit({
 
 /**
  * Very strict rate limiter for sensitive operations
- * 15 requests per minute (password reset, verification resend)
+ * Default: 15 requests per minute (override: RATE_LIMIT_SENSITIVE)
  */
 export const sensitiveRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 15, // 15 requests per minute
+  max: RATE_LIMIT_SENSITIVE,
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many attempts',
