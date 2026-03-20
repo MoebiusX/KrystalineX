@@ -515,7 +515,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "process_resident_memory_bytes{job=\"node\"}",
+          "expr": "nodejs_process_resident_memory_bytes{job=\"krystalinex-server\"}",
           "range": true,
           "refId": "A"
         }
@@ -2243,6 +2243,13 @@
           "expr": "{project=\"krystalinex\", service=~\"app-database|rabbitmq|kong-gateway|alertmanager\"} |= ``",
           "queryType": "range",
           "refId": "A"
+        },
+        {
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{app=\"kx-exchange\"} |= ``",
+          "queryType": "range",
+          "refId": "B"
         }
       ],
       "title": "Application Logs",
@@ -4071,14 +4078,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "nodejs_eventloop_lag_p99_seconds{job=\"krystalinex-server\"}",
+          "expr": "nodejs_nodejs_eventloop_lag_p99_seconds{job=\"krystalinex-server\"}",
           "legendFormat": "P99 Lag",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "nodejs_eventloop_lag_mean_seconds{job=\"krystalinex-server\"}",
+          "expr": "nodejs_nodejs_eventloop_lag_mean_seconds{job=\"krystalinex-server\"}",
           "legendFormat": "Mean Lag",
           "range": true,
           "refId": "B"
@@ -4171,7 +4178,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rabbitmq_queue_depth",
+          "expr": "rabbitmq_queue_messages{queue=~\".+\"}",
           "legendFormat": "{{queue}}",
           "range": true,
           "refId": "A"

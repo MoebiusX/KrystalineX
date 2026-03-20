@@ -59,8 +59,12 @@ function buildTransportConfig(): pino.TransportMultiOptions | pino.TransportSing
           app: 'kx-exchange',
           environment: config.env,
         },
-        // Silence errors to avoid log spam - Loki connection issues shouldn't break logging
-        silenceErrors: true,
+        propsToLabels: ['component'],
+        // Use string template to avoid double-serialization of nested objects
+        // {level} will be numeric (pino convention) — mapped to text via Loki label
+        logFormat: '[{component}] {msg}',
+        replaceTimestamp: true,
+        silenceErrors: false,
       },
     });
   }
