@@ -31,7 +31,14 @@
     "security:check": "npm run security:audit && npm run security:secrets",
     "security:secrets": "node scripts/check-secrets.js",
     "ci:check-docs": "node scripts/check-confidential-docs.cjs",
-    "precommit": "npm run check && npm run security:secrets && npm run ci:check-docs"
+    "precommit": "npm run check && npm run security:secrets && npm run ci:check-docs",
+    "loadtest": "node scripts/load-test.js",
+    "loadtest:smoke": "node scripts/load-test.js --profile smoke",
+    "loadtest:light": "node scripts/load-test.js --profile light",
+    "loadtest:medium": "node scripts/load-test.js --profile medium",
+    "loadtest:heavy": "node scripts/load-test.js --profile heavy",
+    "loadtest:stress": "node scripts/load-test.js --profile stress",
+    "loadtest:remote": "node scripts/load-test.js --remote"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
