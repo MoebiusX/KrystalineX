@@ -197,9 +197,10 @@ ${metricsContext}
 ${traceContext}
 
 Based on the trace data AND correlated metrics, provide:
-1. A brief summary (1-2 sentences) of what likely caused this anomaly
-2. 2-3 possible root causes (consider resource utilization if metrics show issues)
-3. 2-3 actionable recommendations
+1. The top 1-2 spans responsible for most of the delay (cite service:operation and percentage)
+2. A brief summary (1-2 sentences) of what likely caused this anomaly
+3. 2-3 possible root causes (consider resource utilization if metrics show issues)
+4. 2-3 actionable recommendations
 
 Format your response as:
 SUMMARY: [your summary]
@@ -235,19 +236,28 @@ CONFIDENCE: [low/medium/high]`;
 
 
     /**
-     * Format trace context for the prompt
+     * Format trace context for the prompt — sorted by duration to highlight bottlenecks
      */
     private formatTraceContext(trace: JaegerTrace): string {
-        const spans = trace.spans.map(s => ({
-            service: trace.processes[s.processID]?.serviceName || 'unknown',
-            operation: s.operationName,
-            duration: (s.duration / 1000).toFixed(2) + 'ms'
-        }));
+        const rootSpan = trace.spans.reduce((longest, s) =>
+            s.duration > longest.duration ? s : longest, trace.spans[0]);
+        const totalDuration = rootSpan ? rootSpan.duration : 1;
 
-        return `## Trace Context
-The full trace contains ${spans.length} spans:
-${spans.slice(0, 10).map(s => `- ${s.service}: ${s.operation} (${s.duration})`).join('\n')}
-${spans.length > 10 ? `... and ${spans.length - 10} more spans` : ''}`;
+        const spans = trace.spans
+            .map(s => ({
+                service: trace.processes[s.processID]?.serviceName || 'unknown',
+                operation: s.operationName,
+                durationMs: (s.duration / 1000).toFixed(2),
+                pctOfTrace: ((s.duration / totalDuration) * 100).toFixed(1),
+            }))
+            .sort((a, b) => parseFloat(b.durationMs) - parseFloat(a.durationMs));
+
+        return `## Trace Span Breakdown (sorted by duration)
+The trace contains ${spans.length} spans. Top spans by duration:
+${spans.slice(0, 10).map(s => `- ${s.service}:${s.operation} ${s.durationMs}ms (${s.pctOfTrace}% of trace)`).join('\n')}
+${spans.length > 10 ? `... and ${spans.length - 10} more spans` : ''}
+
+Identify the top 1-2 spans responsible for the majority of the delay.`;
     }
 
     /**
