@@ -2250,6 +2250,20 @@
           "expr": "{project=\"krystalinex\", service=~\"app-database|rabbitmq|kong-gateway\"} |= `` != `caller=` != `index_set` != `uploading table` != `cleaning up`",
           "queryType": "range",
           "refId": "B"
+        },
+        {
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{namespace=\"krystalinex\", container=\"server\"} |= `` != `caller=` != `index_set`",
+          "queryType": "range",
+          "refId": "C"
+        },
+        {
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{namespace=\"krystalinex\", container=~\"postgresql|rabbitmq|payment-processor\"} |= `` != `caller=` != `index_set` != `uploading table`",
+          "queryType": "range",
+          "refId": "D"
         }
       ],
       "title": "Application Logs",
