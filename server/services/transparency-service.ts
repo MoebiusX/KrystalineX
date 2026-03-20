@@ -137,17 +137,17 @@ class TransparencyService {
       const hasDegraded = serviceStatuses.includes('degraded');
       const overallStatus = hasOutage ? 'down' : hasDegraded ? 'degraded' : 'operational';
 
-      // Performance metrics - get REAL data from span baselines or show 0 if no data
+      // Performance metrics - only use HTTP request spans (user-facing latency)
       const baselines = await historyStore.getBaselines();
+      const httpMethods = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']);
       let p50 = 0, p95 = 0, p99 = 0;
 
       if (baselines.length > 0) {
-        // Calculate weighted averages based on sample counts
         let totalSamples = 0;
         let weightedP50 = 0, weightedP95 = 0, weightedP99 = 0;
 
         for (const b of baselines) {
-          if (b.sampleCount > 0) {
+          if (b.sampleCount > 0 && httpMethods.has(b.operation)) {
             totalSamples += b.sampleCount;
             weightedP50 += (b.p50 || 0) * b.sampleCount;
             weightedP95 += (b.p95 || 0) * b.sampleCount;
