@@ -2,6 +2,7 @@
 // Creates spans for fetch() requests and exports to OTEL collector
 
 import { trace } from '@opentelemetry/api';
+import { createLogger } from '@/lib/logger';
 import { WebTracerProvider } from '@opentelemetry/sdk-trace-web';
 import { SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -15,13 +16,15 @@ import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions'
 let otelEnabled = false;
 let provider: WebTracerProvider | null = null;
 
+const log = createLogger('OTEL');
+
 export function initBrowserOtel(): void {
     if (provider) {
-        console.log('[OTEL] Browser instrumentation already initialized');
+        log.info('Browser instrumentation already initialized');
         return;
     }
 
-    console.log('[OTEL] Initializing browser OpenTelemetry...');
+    log.info('Initializing browser OpenTelemetry...');
 
     // Create resource with service name using OTEL v2 API
     const resource = resourceFromAttributes({
@@ -37,7 +40,7 @@ export function initBrowserOtel(): void {
     const otelCollectorUrl = rawOtelUrl.startsWith('/')
         ? `${window.location.origin}${rawOtelUrl}`
         : rawOtelUrl;
-    console.log('[OTEL] Collector URL:', `${otelCollectorUrl}/v1/traces`);
+    log.info({ url: `${otelCollectorUrl}/v1/traces` }, 'Collector URL');
     const exporter = new OTLPTraceExporter({
         url: `${otelCollectorUrl}/v1/traces`,
         headers: {},
@@ -57,7 +60,7 @@ export function initBrowserOtel(): void {
 
     // Verify the global trace API is using our provider
     const testTracer = trace.getTracer('test-tracer');
-    console.log('[OTEL] Global tracer registered:', !!testTracer);
+    log.info({ registered: !!testTracer }, 'Global tracer registered');
 
     // Register fetch instrumentation
     registerInstrumentations({
@@ -91,7 +94,7 @@ export function initBrowserOtel(): void {
     });
 
     otelEnabled = true;
-    console.log('[OTEL] Browser instrumentation initialized - service.name: react-client');
+    log.info('Browser instrumentation initialized — service.name: react-client');
 
     // Report Core Web Vitals as OTEL spans
     const vitalTracer = provider.getTracer('web-vitals');
@@ -111,9 +114,9 @@ export function initBrowserOtel(): void {
         onCLS(report);
         onFCP(report);
         onTTFB(report);
-        console.log('[OTEL] Web Vitals reporting enabled');
+        log.info('Web Vitals reporting enabled');
     }).catch((err: Error) => {
-        console.warn('[OTEL] Web Vitals not available:', err.message);
+        log.warn({ err: err.message }, 'Web Vitals not available');
     });
 }
 

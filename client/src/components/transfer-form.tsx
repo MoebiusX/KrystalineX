@@ -4,6 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { trace, context, SpanStatusCode } from "@opentelemetry/api";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger('TransferForm');
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -71,11 +74,11 @@ export function TransferForm() {
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             });
             if (!res.ok) {
-                console.error('[TransferForm] Failed to fetch users:', res.status, res.statusText);
+                log.error({ status: res.status, statusText: res.statusText }, 'Failed to fetch users');
                 return [];
             }
             const data = await res.json();
-            console.log('[TransferForm] Fetched users:', data);
+            log.debug({ count: data?.length }, 'Fetched users');
             return data;
         },
         enabled: !!currentUser,

@@ -13,6 +13,9 @@
  */
 
 import { useEffect, useState } from 'react';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Transparency');
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Activity, TrendingUp, Shield, Zap, Users, Eye, AlertTriangle, Lock, CheckCircle, Fingerprint } from 'lucide-react';
@@ -119,7 +122,7 @@ export function TransparencyDashboard() {
       ]);
 
       if (!statusRes.ok || !tradesRes.ok) {
-        console.error('Failed to fetch data:', { statusRes: statusRes.status, tradesRes: tradesRes.status });
+        log.error({ statusRes: statusRes.status, tradesRes: tradesRes.status }, 'Failed to fetch data');
         setLoading(false);
         return;
       }
@@ -137,7 +140,7 @@ export function TransparencyDashboard() {
       setSecondsAgo(0);
       setLoading(false);
     } catch (error) {
-      console.error('Failed to fetch transparency data:', error);
+      log.error({ error }, 'Failed to fetch transparency data');
       setLoading(false);
     }
   };
