@@ -2240,14 +2240,14 @@
         {
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{project=\"krystalinex\", service=~\"app-database|rabbitmq|kong-gateway|alertmanager\"} |= ``",
+          "expr": "{app=\"kx-exchange\"} |= ``",
           "queryType": "range",
           "refId": "A"
         },
         {
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{app=\"kx-exchange\"} |= ``",
+          "expr": "{project=\"krystalinex\", service=~\"app-database|rabbitmq|kong-gateway\"} |= `` != `caller=` != `index_set` != `uploading table` != `cleaning up`",
           "queryType": "range",
           "refId": "B"
         }
