@@ -12,6 +12,7 @@ import { metricsCorrelator } from './metrics-correlator';
 import { trainingStore } from './training-store';
 import { amountProfiler } from './amount-profiler';
 import { amountAnomalyDetector } from './amount-anomaly-detector';
+import { topologyService } from './topology-service';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
 import type {
@@ -103,8 +104,8 @@ router.get('/history', async (req, res) => {
  * Trigger LLM analysis for a trace
  */
 router.post('/analyze', async (req, res) => {
-    // Override global 30s timeout — Ollama cold starts can take 2+ minutes
-    res.setTimeout(150000);
+    // Override global 30s timeout — F16 model on CPU takes ~4-5 minutes
+    res.setTimeout(330000);
 
     const { traceId, anomalyId } = req.body;
 
@@ -554,6 +555,219 @@ router.put('/model', (req, res) => {
         availableModels: getAvailableModels(),
         message: `Model switched to ${result.model}. Next analysis will use this model.`,
     });
+});
+
+// ============================================
+// SLO (Service Level Objectives) Routes
+// ============================================
+
+const PROMETHEUS_URL = process.env.PROMETHEUS_URL || 'http://localhost:9090';
+
+async function queryPrometheus(query: string): Promise<number | null> {
+    try {
+        const url = `${PROMETHEUS_URL}/api/v1/query?query=${encodeURIComponent(query)}`;
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const data = await response.json() as { status: string; data: { result: Array<{ value: [number, string] }> } };
+        if (data.status !== 'success' || !data.data.result.length) return null;
+        return parseFloat(data.data.result[0].value[1]);
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * GET /api/monitor/slo
+ * Current SLO status: availability, latency, error budgets, burn rates
+ */
+router.get('/slo', async (_req, res) => {
+    try {
+        const [
+            errorRatio1h,
+            errorRatio6h,
+            latencyRatio1h,
+            availabilityBudget,
+            latencyBudget,
+            p95_5m,
+            p99_5m,
+        ] = await Promise.all([
+            queryPrometheus('slo:http_requests:error_ratio_1h'),
+            queryPrometheus('slo:http_requests:error_ratio_6h'),
+            queryPrometheus('slo:http_request_duration:ratio_below_500ms_1h'),
+            queryPrometheus('slo:availability:error_budget_remaining'),
+            queryPrometheus('slo:latency:error_budget_remaining'),
+            queryPrometheus('slo:http_request_duration:p95_5m'),
+            queryPrometheus('slo:http_request_duration:p99_5m'),
+        ]);
+
+        const availabilityTarget = 0.999;
+        const latencyTarget = 0.95;
+        const allowedErrorRatio = 1 - availabilityTarget; // 0.001
+
+        res.json({
+            availability: {
+                target: availabilityTarget,
+                current: errorRatio1h !== null ? 1 - errorRatio1h : null,
+                burnRate1h: errorRatio1h !== null ? errorRatio1h / allowedErrorRatio : null,
+                burnRate6h: errorRatio6h !== null ? errorRatio6h / allowedErrorRatio : null,
+                budgetRemaining: availabilityBudget,
+                budgetMinutesRemaining: availabilityBudget !== null ? Math.max(0, availabilityBudget * 43.2) : null,
+            },
+            latency: {
+                target: latencyTarget,
+                targetMs: 500,
+                currentRatioBelow500ms: latencyRatio1h,
+                p95Ms: p95_5m !== null ? p95_5m * 1000 : null,
+                p99Ms: p99_5m !== null ? p99_5m * 1000 : null,
+                budgetRemaining: latencyBudget,
+            },
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Failed to fetch SLO data');
+        res.status(500).json({ error: 'Failed to fetch SLO data' });
+    }
+});
+
+// ============================================
+// Service Topology Routes (Cap 4: Causal Inference)
+// ============================================
+
+/**
+ * GET /api/monitor/topology
+ * Returns the current service dependency graph from Jaeger with blast radius analysis.
+ */
+router.get('/topology', async (req, res) => {
+    try {
+        const graph = await topologyService.getGraph();
+        const service = req.query.blastRadius as string | undefined;
+        const blastRadius = service ? topologyService.getBlastRadius(service) : undefined;
+
+        res.json({
+            ...graph,
+            ...(blastRadius !== undefined && { blastRadius: { service, impacted: blastRadius } }),
+        });
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Failed to fetch service topology');
+        res.status(500).json({ error: 'Failed to fetch service topology' });
+    }
+});
+
+// ============================================
+// Deployment Events Routes (Cap 13: Cross-Domain Correlation)
+// ============================================
+
+interface DeploymentEvent {
+    id: string;
+    type: string;
+    version?: string;
+    commit?: string;
+    deployer?: string;
+    description?: string;
+    environment?: string;
+    timestamp: string;
+}
+
+// In-memory event store (production: PostgreSQL)
+const deploymentEvents: DeploymentEvent[] = [];
+
+/**
+ * POST /api/monitor/events
+ * Record a deployment or operational event for correlation with anomalies.
+ */
+router.post('/events', (req, res) => {
+    const { type, version, commit, deployer, description, environment } = req.body;
+
+    if (!type) {
+        return res.status(400).json({ error: 'Field "type" is required' });
+    }
+    if (type === 'deployment' && !version) {
+        return res.status(400).json({ error: 'Field "version" is required for deployment events' });
+    }
+
+    const event: DeploymentEvent = {
+        id: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type,
+        version,
+        commit,
+        deployer,
+        description,
+        environment,
+        timestamp: new Date().toISOString(),
+    };
+
+    deploymentEvents.push(event);
+    logger.info({ event }, 'Recorded deployment event');
+
+    return res.status(201).json(event);
+});
+
+/**
+ * GET /api/monitor/events
+ * Query deployment events, optionally filtered by type or time window.
+ */
+router.get('/events', (req, res) => {
+    const typeFilter = req.query.type as string | undefined;
+    const near = req.query.near ? parseInt(req.query.near as string) : undefined;
+    const window = req.query.window ? parseInt(req.query.window as string) : 600000; // 10 min default
+
+    let events = [...deploymentEvents];
+
+    if (typeFilter) {
+        events = events.filter(e => e.type === typeFilter);
+    }
+
+    if (near !== undefined) {
+        events = events.filter(e => {
+            const eventTime = new Date(e.timestamp).getTime();
+            return Math.abs(eventTime - near) <= window;
+        });
+    }
+
+    // Return most recent first, limit 100
+    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    res.json({ events: events.slice(0, 100) });
+});
+
+// ============================================
+// PromQL Proxy Routes (Cap 12: Programmability)
+// ============================================
+
+/**
+ * GET /api/monitor/query
+ * Proxies PromQL queries to Prometheus for dashboard and programmatic use.
+ * Supports both instant and range queries.
+ */
+router.get('/query', async (req, res) => {
+    const query = req.query.q as string | undefined;
+    if (!query) {
+        return res.status(400).json({ error: 'Query parameter "q" is required' });
+    }
+
+    const type = (req.query.type as string) || 'instant';
+    const promUrl = process.env.PROMETHEUS_URL || 'http://localhost:9090';
+
+    try {
+        let url: string;
+        if (type === 'range') {
+            const start = req.query.start as string;
+            const end = req.query.end as string;
+            const step = req.query.step as string || '60';
+            url = `${promUrl}/api/v1/query_range?query=${encodeURIComponent(query)}&start=${start}&end=${end}&step=${step}`;
+        } else {
+            url = `${promUrl}/api/v1/query?query=${encodeURIComponent(query)}`;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            return res.status(502).json({ error: `Prometheus returned ${response.status}` });
+        }
+        const data = await response.json();
+        res.json(data);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'PromQL proxy failed');
+        res.status(502).json({ error: 'Failed to reach Prometheus' });
+    }
 });
 
 export default router;

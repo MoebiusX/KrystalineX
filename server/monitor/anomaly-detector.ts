@@ -2,6 +2,7 @@ import type {
     JaegerTrace,
     JaegerSpan,
     Anomaly,
+    TraceSpanSummary,
     ServiceHealth,
     SeverityLevel
 } from './types';
@@ -11,6 +12,7 @@ import { streamAnalyzer } from './stream-analyzer';
 import { config } from '../config';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
+import { recordAnomalyDetected } from '../metrics/prometheus';
 
 const logger = createLogger('anomaly-detector');
 const JAEGER_API_URL = config.observability.jaegerUrl;
@@ -162,6 +164,9 @@ export class AnomalyDetector {
                 if (this.lastCheckedTraceIds.has(trace.traceID)) continue;
                 this.lastCheckedTraceIds.add(trace.traceID);
 
+                // Pre-compute trace span summaries for LLM context
+                const traceSpans = this.summarizeTraceSpans(trace);
+
                 // Check each span
                 for (const span of trace.spans) {
                     const process = trace.processes[span.processID];
@@ -169,8 +174,12 @@ export class AnomalyDetector {
 
                     const anomaly = this.checkSpan(span, process.serviceName, trace.traceID);
                     if (anomaly) {
+                        // Attach sibling span breakdown for root-cause analysis
+                        anomaly.traceSpans = traceSpans;
+
                         this.anomalies.set(anomaly.id, anomaly);
                         newAnomalies++;
+                        recordAnomalyDetected(anomaly.service, anomaly.severity);
 
                         // Stream SEV1-3 anomalies for real-time LLM analysis
                         if (anomaly.severity <= 3) {
@@ -275,6 +284,29 @@ export class AnomalyDetector {
             dayOfWeek: timestamp.getDay(),
             hourOfDay: timestamp.getHours(),
         };
+    }
+
+    /**
+     * Summarize trace spans for LLM context — sorted by duration descending
+     */
+    private summarizeTraceSpans(trace: JaegerTrace): TraceSpanSummary[] {
+        const rootSpan = trace.spans.reduce((longest, s) =>
+            s.duration > longest.duration ? s : longest, trace.spans[0]);
+        const totalDuration = rootSpan ? rootSpan.duration : 1;
+
+        return trace.spans
+            .map(s => {
+                const proc = trace.processes[s.processID];
+                const durationMs = Math.round((s.duration / 1000) * 100) / 100;
+                return {
+                    service: proc?.serviceName || 'unknown',
+                    operation: s.operationName,
+                    durationMs,
+                    pctOfTrace: Math.round((s.duration / totalDuration) * 1000) / 10,
+                };
+            })
+            .sort((a, b) => b.durationMs - a.durationMs)
+            .slice(0, 10); // Top 10 spans by duration
     }
 
     /**

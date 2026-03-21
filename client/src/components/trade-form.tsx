@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { getJaegerTraceUrl } from "@/lib/trace-utils";
 import { TradeVerifiedModal } from "@/components/trade-verified-modal";
+import { createLogger } from "@/lib/logger";
 import { ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, Loader2, Bitcoin, CheckCircle2, Clock, ExternalLink, Lock, CheckCircle } from "lucide-react";
+
+const log = createLogger('TradeForm');
 
 // Type-safe error message extraction
 const getErrorMessage = (error: unknown): string =>
@@ -89,8 +92,8 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
             const userData = localStorage.getItem('user');
             if (userData) {
                 const parsed = JSON.parse(userData);
-                console.log('[TradeForm] User from localStorage:', parsed);
-                console.log('[TradeForm] Extracted ID:', parsed.id);
+                log.debug({ parsed }, 'User from localStorage');
+                log.debug({ id: parsed.id }, 'Extracted ID');
                 // Only accept UUID format - no email fallback
                 return parsed.id || null;
             }
@@ -158,10 +161,8 @@ export function TradeForm({ currentUser: propUser, walletAddress: propAddress }:
                     parentSpan.setAttribute('order.quantity', data.quantity);
                     parentSpan.setAttribute('order.pair', data.pair);
 
-                    // DEBUG: Log what we're about to send
-                    console.log('[TradeForm] Submitting order with currentUser:', currentUser);
-                    console.log('[TradeForm] currentUser type:', typeof currentUser);
-                    console.log('[TradeForm] Order payload:', { ...data, userId: currentUser });
+                    log.info({ currentUser, userType: typeof currentUser }, 'Submitting order');
+                    log.debug({ payload: { ...data, userId: currentUser } }, 'Order payload');
 
                     // Route through Kong Gateway for proper API gateway tracing
                     const response = await fetch(`${kongUrl}/api/v1/orders`, {

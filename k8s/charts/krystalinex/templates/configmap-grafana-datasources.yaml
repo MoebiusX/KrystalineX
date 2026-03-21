@@ -19,6 +19,9 @@ data:
         jsonData:
           httpMethod: POST
           prometheusType: Prometheus
+          exemplarTraceIdDestinations:
+            - name: traceID
+              datasourceUid: jaeger
       - name: Jaeger
         type: jaeger
         uid: jaeger
@@ -26,12 +29,18 @@ data:
         url: http://{{ include "krystalinex.fullname" . }}-jaeger:16686/jaeger
         isDefault: false
         jsonData:
+          nodeGraph:
+            enabled: true
           tracesToLogs:
             datasourceUid: loki
             filterByTraceID: true
             spanStartTimeShift: "-1h"
             spanEndTimeShift: "1h"
             lokiSearch: true
+          tracesToMetrics:
+            datasourceUid: prometheus
+            spanStartTimeShift: "-5m"
+            spanEndTimeShift: "5m"
       {{- if .Values.loki }}
       {{- if .Values.loki.enabled }}
       - name: Loki

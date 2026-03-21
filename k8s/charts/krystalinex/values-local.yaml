@@ -39,6 +39,20 @@ rabbitmq:
       cpu: 200m
       memory: 512Mi
 
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+  maxmemory: "256mb"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 # ============================================
 # Core Application Services
 # ============================================
@@ -46,7 +60,7 @@ rabbitmq:
 server:
   image:
     repository: moebiusx/krystalinex-server
-    tag: "v2.2.9"
+    tag: "v2.4.0"
     pullPolicy: Always
   resources:
     limits:
@@ -71,6 +85,10 @@ server:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3
+  env:
+    RATE_LIMIT_GENERAL: "30000"
+    RATE_LIMIT_AUTH: "1000"
+    RATE_LIMIT_SENSITIVE: "500"
 
 paymentProcessor:
   image:
@@ -104,7 +122,7 @@ paymentProcessor:
 frontend:
   image:
     repository: moebiusx/krystalinex-frontend
-    tag: "v2.1.23"
+    tag: "v2.1.24"
     pullPolicy: Always
   resources:
     limits:

@@ -1,6 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useState, useEffect, useRef } from "react";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger('Monitor');
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -159,12 +162,12 @@ export default function Monitor() {
             wsRef.current = ws;
 
             ws.onopen = () => {
-                console.log('[WS] Connected to monitor');
+                log.info('Connected to monitor');
                 setWsConnected(true);
             };
 
             ws.onclose = () => {
-                console.log('[WS] Disconnected, reconnecting...');
+                log.warn('Disconnected, reconnecting...');
                 setWsConnected(false);
                 setTimeout(connect, 3000);
             };
@@ -199,7 +202,7 @@ export default function Monitor() {
             };
 
             ws.onerror = (err) => {
-                console.error('[WS] Error:', err);
+                log.error({ err }, 'WebSocket error');
             };
         };
 

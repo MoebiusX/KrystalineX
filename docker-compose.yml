@@ -119,15 +119,15 @@ services:
       - kong-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
-      interval: 10s
+      test: ["CMD", "/otelcol-contrib", "components"]
+      interval: 30s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 3
+      start_period: 15s
 
   # Loki - Log aggregation for Unified Observability
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.0.0
     ports:
       - "3100:3100"
     volumes:
@@ -141,7 +141,7 @@ services:
 
   # Promtail - Log shipper for container logs to Loki
   promtail:
-    image: grafana/promtail:latest
+    image: grafana/promtail:3.0.0
     volumes:
       - ./config/promtail-config.yaml:/etc/promtail/config.yaml
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -224,11 +224,15 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - ./config/alerting-rules.yml:/etc/prometheus/alerting-rules.yml
+      - ./config/recording-rules.yml:/etc/prometheus/recording-rules.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=10GB'
       - '--web.enable-lifecycle'
+      - '--enable-feature=exemplar-storage'
     networks:
       - kong-net
     extra_hosts:
@@ -239,7 +243,7 @@ services:
 
   # Alertmanager - Alert routing and notification
   alertmanager:
-    image: prom/alertmanager:latest
+    image: prom/alertmanager:v0.27.0
     ports:
       - "9093:9093"
     volumes:
@@ -309,7 +313,7 @@ services:
 
   # GoAlert - Incident management and on-call scheduling
   goalert:
-    image: goalert/goalert:latest
+    image: goalert/goalert:v0.33.0
     restart: always
     depends_on:
       goalert-db:
@@ -363,12 +367,32 @@ services:
     restart: unless-stopped
 
   # ============================================
+  # CACHE LAYER
+  # ============================================
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - kong-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================
   # METRICS EXPORTERS
   # ============================================
 
   # PostgreSQL Exporter - Metrics for app-database
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
+    image: prometheuscommunity/postgres-exporter:v0.15.0
     environment:
       DATA_SOURCE_NAME: "postgresql://${DB_USER:-exchange}:${DB_PASSWORD}@app-database:5432/${DB_NAME:-crypto_exchange}?sslmode=disable"
     ports:
@@ -382,7 +406,7 @@ services:
 
   # Kong PostgreSQL Exporter - Metrics for kong-database
   kong-postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
+    image: prometheuscommunity/postgres-exporter:v0.15.0
     environment:
       DATA_SOURCE_NAME: "postgresql://${KONG_PG_USER:-kong}:${KONG_PG_PASSWORD}@kong-database:5432/${KONG_PG_DATABASE:-kong}?sslmode=disable"
     ports:
@@ -395,7 +419,7 @@ services:
 
   # Node Exporter - OS/Host metrics (CPU, memory, disk, network)
   node-exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1.7.0
     ports:
       - "9100:9100"
     volumes:
@@ -409,6 +433,20 @@ services:
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
     networks:
       - kong-net
+    restart: unless-stopped
+
+  # Redis Exporter - Redis metrics for Prometheus
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "9121:9121"
+    networks:
+      - kong-net
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   # NOTE: Node.js services (kx-exchange, payment-processor, frontend) run natively on the host.
@@ -425,6 +463,7 @@ volumes:
   app_data:
   loki_data:
   grafana_data:
+  redis_data:
 
 networks:
   kong-net:

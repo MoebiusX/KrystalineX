@@ -98,6 +98,17 @@ export interface Anomaly {
     // Time context
     dayOfWeek?: number;
     hourOfDay?: number;
+    // Trace context — sibling spans from the same trace for root-cause analysis
+    traceSpans?: TraceSpanSummary[];
+}
+
+/** Lightweight span summary attached to anomalies for LLM context */
+export interface TraceSpanSummary {
+    service: string;
+    operation: string;
+    durationMs: number;
+    /** Percentage of total trace duration consumed by this span */
+    pctOfTrace: number;
 }
 
 // Service Health

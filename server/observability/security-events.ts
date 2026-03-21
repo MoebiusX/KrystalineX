@@ -58,6 +58,38 @@ export interface SecurityEventInput {
     traceId?: string;
 }
 
+// ============================================
+// SIEM WEBHOOK EXPORT
+// ============================================
+
+/**
+ * Export high/critical security events to an external SIEM webhook.
+ * Configured via SIEM_WEBHOOK_URL and SIEM_API_KEY environment variables.
+ * Fails silently to avoid disrupting security event recording.
+ */
+export async function exportToSIEM(event: SecurityEventInput): Promise<void> {
+    const webhookUrl = process.env.SIEM_WEBHOOK_URL;
+    if (!webhookUrl) return;
+    if (!event.severity || !['high', 'critical'].includes(event.severity)) return;
+
+    try {
+        await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(process.env.SIEM_API_KEY && { 'Authorization': `Bearer ${process.env.SIEM_API_KEY}` }),
+            },
+            body: JSON.stringify({
+                ...event,
+                source: 'krystalinex',
+                timestamp: new Date().toISOString(),
+            }),
+        });
+    } catch (err) {
+        logger.warn({ err }, 'SIEM webhook export failed');
+    }
+}
+
 /**
  * Record a security event to the database and emit metrics.
  */
@@ -78,6 +110,9 @@ export async function recordSecurityEvent(event: SecurityEventInput): Promise<Se
 
     // Emit Prometheus metric
     securityEventsTotal.labels(event.eventType!, event.severity!).inc();
+
+    // Export to SIEM for high/critical events (fire-and-forget)
+    exportToSIEM({ ...event, traceId }).catch(() => {});
 
     // Log for real-time visibility
     logger.info({

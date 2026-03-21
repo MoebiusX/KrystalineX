@@ -48,11 +48,17 @@ docs/*Dashboard*.json
 docs/*Observability*.json
 
 # Model training artifacts (large binary files)
-lora-anomaly-analyzer/
 last_run_prepared/
 *.gguf
 *.safetensors
 *.bin
+*.pt
+*.pth
+
+# LoRA training generated outputs (keep lightweight config/tokenizer files tracked)
+lora-anomaly-analyzer/checkpoint-*/
+lora-anomaly-analyzer/merged/
+lora-anomaly-analyzer/tokenizer.json
 
 # Confidential
 docs/bizait lab network.md

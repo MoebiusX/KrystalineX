@@ -1,3 +1,7 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
 receivers:
   otlp:
     protocols:
@@ -5,35 +9,69 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
-        # Enable CORS for browser OTEL instrumentation
         cors:
           allowed_origins:
             - "http://localhost:5173"
             - "http://localhost:5174"
             - "http://localhost:5000"
             - "http://localhost:8000"
+            - "https://www.krystaline.io"
+            - "https://krystaline.io"
           allowed_headers:
             - "*"
+          max_age: 7200
 
 exporters:
   otlp/jaeger:
     endpoint: jaeger:4317
     tls:
       insecure: true
-  debug:
-    verbosity: detailed
 
 processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    policies:
+      - name: always-sample-errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: always-sample-slow
+        type: latency
+        latency:
+          threshold_ms: 500
+      - name: always-sample-payments
+        type: string_attribute
+        string_attribute:
+          key: rpc.service
+          values: [kx-matcher, payment-processor]
+      - name: probabilistic-normal
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
   batch:
     timeout: 1s
     send_batch_size: 1024
 
 service:
+  extensions: [health_check]
   telemetry:
     logs:
-      level: debug
+      level: info
+    metrics:
+      level: detailed
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "0.0.0.0"
+                port: 8888
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp/jaeger, debug]
+      processors: [memory_limiter, tail_sampling, batch]
+      exporters: [otlp/jaeger]

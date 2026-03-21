@@ -7,11 +7,14 @@ import { TradeForm } from "@/components/trade-form";
 import { TransferForm } from "@/components/transfer-form";
 import { TraceViewer } from "@/components/trace-viewer";
 import { formatTimeAgo } from "@/lib/utils";
+import { createLogger } from "@/lib/logger";
 import { Bitcoin, TrendingUp, Wallet, ArrowUpRight, ArrowDownRight, Send, ArrowRightLeft, Sparkles, X, CheckCircle2, Eye, Zap, DollarSign, CreditCard, RefreshCw } from "lucide-react";
 import type { Order, Transfer } from "@shared/schema";
 import Layout from "@/components/Layout";
 import { useLocation, useSearch } from "wouter";
 import { getJaegerTraceUrl } from "@/lib/trace-utils";
+
+const log = createLogger('Dashboard');
 
 // Types for portfolio
 interface WalletData {
@@ -95,7 +98,7 @@ export default function Dashboard() {
         setCurrentUser(parsed.id || null);
 
         if (!parsed.id) {
-          console.error('[Dashboard] No valid UUID found in user data:', parsed);
+          log.error({ parsed }, 'No valid UUID found in user data');
           navigate('/login');
         }
       } catch {

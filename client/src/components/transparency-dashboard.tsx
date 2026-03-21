@@ -13,6 +13,9 @@
  */
 
 import { useEffect, useState } from 'react';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Transparency');
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Activity, TrendingUp, Shield, Zap, Users, Eye, AlertTriangle, Lock, CheckCircle, Fingerprint } from 'lucide-react';
@@ -119,7 +122,7 @@ export function TransparencyDashboard() {
       ]);
 
       if (!statusRes.ok || !tradesRes.ok) {
-        console.error('Failed to fetch data:', { statusRes: statusRes.status, tradesRes: tradesRes.status });
+        log.error({ statusRes: statusRes.status, tradesRes: tradesRes.status }, 'Failed to fetch data');
         setLoading(false);
         return;
       }
@@ -137,7 +140,7 @@ export function TransparencyDashboard() {
       setSecondsAgo(0);
       setLoading(false);
     } catch (error) {
-      console.error('Failed to fetch transparency data:', error);
+      log.error({ error }, 'Failed to fetch transparency data');
       setLoading(false);
     }
   };
@@ -730,7 +733,7 @@ export function TransparencyDashboard() {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-cyan-100">Performance Transparency</h3>
-                    <p className="text-sm text-cyan-100/50">Real metrics from OpenTelemetry</p>
+                    <p className="text-sm text-cyan-100/50">Live metrics from Prometheus</p>
                   </div>
                 </div>
 
@@ -742,7 +745,7 @@ export function TransparencyDashboard() {
                       <span className="font-mono text-base font-semibold text-emerald-400">{status.performance.p50ResponseMs}ms</span>
                     </div>
                     <div className="h-2.5 bg-slate-800/50 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full" style={{ width: `${Math.min((status.performance.p50ResponseMs / 100) * 100, 100)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full" style={{ width: `${Math.min((status.performance.p50ResponseMs / 500) * 100, 100)}%` }} />
                     </div>
                   </div>
 
@@ -753,7 +756,7 @@ export function TransparencyDashboard() {
                       <span className="font-mono text-base font-semibold text-blue-400">{status.performance.p95ResponseMs}ms</span>
                     </div>
                     <div className="h-2.5 bg-slate-800/50 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full" style={{ width: `${Math.min((status.performance.p95ResponseMs / 200) * 100, 100)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full" style={{ width: `${Math.min((status.performance.p95ResponseMs / 1000) * 100, 100)}%` }} />
                     </div>
                   </div>
 
@@ -764,7 +767,7 @@ export function TransparencyDashboard() {
                       <span className="font-mono text-base font-semibold text-amber-400">{status.performance.p99ResponseMs}ms</span>
                     </div>
                     <div className="h-2.5 bg-slate-800/50 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full" style={{ width: `${Math.min((status.performance.p99ResponseMs / 300) * 100, 100)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full" style={{ width: `${Math.min((status.performance.p99ResponseMs / 2000) * 100, 100)}%` }} />
                     </div>
                   </div>
                 </div>

@@ -13,6 +13,7 @@ import { traceProfiler } from '../monitor/trace-profiler';
 import { anomalyDetector } from '../monitor/anomaly-detector';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
+import { cacheGet, cacheSet } from '../lib/redis';
 import {
   systemStatusSchema,
   publicTradeSchema,
@@ -61,6 +62,10 @@ class TransparencyService {
    */
   async getSystemStatus(): Promise<SystemStatus> {
     try {
+      // Check Redis cache first (30s TTL)
+      const cached = await cacheGet<SystemStatus>('status:system');
+      if (cached) return cached;
+
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
@@ -137,17 +142,40 @@ class TransparencyService {
       const hasDegraded = serviceStatuses.includes('degraded');
       const overallStatus = hasOutage ? 'down' : hasDegraded ? 'degraded' : 'operational';
 
-      // Performance metrics - get REAL data from span baselines or show 0 if no data
-      const baselines = await historyStore.getBaselines();
+      // Performance metrics - query Prometheus histogram for real HTTP latency
+      // Falls back to span baselines (HTTP-only) if Prometheus is unavailable
       let p50 = 0, p95 = 0, p99 = 0;
 
-      if (baselines.length > 0) {
-        // Calculate weighted averages based on sample counts
+      try {
+        const prometheusUrl = config.observability.prometheusUrl;
+
+        const quantiles = [0.5, 0.95, 0.99];
+
+        const results = await Promise.all(
+          quantiles.map(async (q) => {
+            const query = `histogram_quantile(${q}, sum(rate(http_request_duration_seconds_bucket{job="krystalinex-server"}[1h])) by (le))`;
+            const url = `${prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`;
+            const resp = await fetch(url, { signal: AbortSignal.timeout(3000) });
+            const data = await resp.json() as { data?: { result?: Array<{ value?: [number, string] }> } };
+            const val = data?.data?.result?.[0]?.value?.[1];
+            if (!val || val === 'NaN' || val === '+Inf') return 0;
+            return Math.round(parseFloat(val) * 1000); // seconds → ms
+          })
+        );
+
+        [p50, p95, p99] = results;
+      } catch {
+        // Prometheus unavailable — fall back to span baselines
+        // Only use kx-exchange HTTP spans with 100+ samples (skip cold-start data)
+        logger.debug('Prometheus unavailable for performance metrics, using span baselines');
+        const baselines = await historyStore.getBaselines();
         let totalSamples = 0;
         let weightedP50 = 0, weightedP95 = 0, weightedP99 = 0;
+        const httpMethods = new Set(['GET', 'POST', 'PUT', 'DELETE', 'PATCH']);
+        const MIN_SAMPLES = 100;
 
         for (const b of baselines) {
-          if (b.sampleCount > 0) {
+          if (b.sampleCount >= MIN_SAMPLES && httpMethods.has(b.operation) && b.service === 'kx-exchange') {
             totalSamples += b.sampleCount;
             weightedP50 += (b.p50 || 0) * b.sampleCount;
             weightedP95 += (b.p95 || 0) * b.sampleCount;
@@ -187,6 +215,10 @@ class TransparencyService {
       // Validate response before returning
       const validatedStatus = systemStatusSchema.parse(status);
       logger.info({ status: validatedStatus.status, uptime: validatedStatus.uptime }, 'Generated system status');
+
+      // Cache for 30 seconds
+      await cacheSet('status:system', validatedStatus, 30);
+
       return validatedStatus;
     } catch (error: unknown) {
       logger.error({ err: error }, 'Failed to generate system status');
@@ -199,6 +231,11 @@ class TransparencyService {
    */
   async getPublicTrades(limit: number = 20): Promise<PublicTrade[]> {
     try {
+      // Check Redis cache first (15s TTL — trades change but N+1 Jaeger calls are expensive)
+      const cacheKey = `trades:public:${limit}`;
+      const cached = await cacheGet<PublicTrade[]>(cacheKey);
+      if (cached) return cached;
+
       // Fetch more trades than needed since we'll filter out ones without traces
       const result = await db.query(
         `SELECT 
@@ -289,6 +326,10 @@ class TransparencyService {
       }
 
       logger.info({ count: publicTrades.length }, 'Retrieved public trades with verified traces');
+
+      // Cache for 15 seconds
+      await cacheSet(cacheKey, publicTrades, 15);
+
       return publicTrades;
     } catch (error: unknown) {
       logger.error({ err: error }, 'Failed to get public trades');
@@ -302,6 +343,10 @@ class TransparencyService {
    */
   async getTransparencyMetrics(): Promise<TransparencyMetrics> {
     try {
+      // Check Redis cache first (30s TTL)
+      const cached = await cacheGet<TransparencyMetrics>('metrics:transparency');
+      if (cached) return cached;
+
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
@@ -375,6 +420,10 @@ class TransparencyService {
       // Validate response before returning
       const validatedMetrics = transparencyMetricsSchema.parse(metrics);
       logger.info('Generated transparency metrics');
+
+      // Cache for 30 seconds
+      await cacheSet('metrics:transparency', validatedMetrics, 30);
+
       return validatedMetrics;
     } catch (error: unknown) {
       logger.error({ err: error }, 'Failed to generate transparency metrics');

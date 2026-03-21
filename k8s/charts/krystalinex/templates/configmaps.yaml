@@ -11,9 +11,10 @@ data:
       scrape_interval: 15s
       evaluation_interval: 15s
 
-    # Load alerting rules
+    # Load alerting and recording rules
     rule_files:
       - /etc/prometheus/alerting-rules.yml
+      - /etc/prometheus/recording-rules.yml
 
     # Alertmanager configuration
     alerting:
@@ -62,10 +63,12 @@ data:
         scrape_interval: 15s
 
       # PostgreSQL Exporter (app database metrics)
+      {{- if .Values.postgresExporter.enabled }}
       - job_name: 'postgres-exporter'
         static_configs:
           - targets: ['{{ include "krystalinex.fullname" . }}-postgres-exporter:9187']
         scrape_interval: 15s
+      {{- end }}
 
       # Kube State Metrics (K8s object metrics - pods, deployments, nodes)
       {{- if .Values.kubeStateMetrics.enabled }}
@@ -80,11 +83,13 @@ data:
       # ============================================
 
       # Ollama (LLM inference)
+      {{- if .Values.ollama.enabled }}
       - job_name: 'ollama'
         static_configs:
           - targets: ['{{ include "krystalinex.fullname" . }}-ollama:11434']
         metrics_path: /metrics
         scrape_interval: 30s
+      {{- end }}
 
       # ============================================
       # OBSERVABILITY STACK
@@ -116,6 +121,11 @@ data:
           - targets: ['{{ include "krystalinex.fullname" . }}-grafana:3000']
         metrics_path: /grafana/metrics
         scrape_interval: 30s
+
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-redis-exporter:9121']
+        scrape_interval: 15s
 
   alerting-rules.yml: |
     # KrystalineX Prometheus Alerting Rules
@@ -531,31 +541,285 @@ data:
               description: "4xx error rate is {{ "{{" }} $value | humanize {{ "}}" }}/s — 5x higher than baseline. Possible scanning or probing."
 
       # ============================================
-      # SLA ALERTS
+      # SLO BURN RATE ALERTS — AVAILABILITY
+      # SLO: 99.9% availability (error budget = 0.1%)
       # ============================================
-      - name: krystalinex.sla
+      - name: krystalinex.slo.availability
         rules:
-          - alert: AvailabilitySLABreach
+          - alert: SLOAvailabilityBurnRateCritical
             expr: |
-              (1 - (sum(rate(http_requests_total{status=~"5.."}[1h])) / sum(rate(http_requests_total[1h])))) < 0.999
+              slo:http_requests:error_ratio_1h > (14.4 * 0.001)
+              and
+              slo:http_requests:error_ratio_5m > (14.4 * 0.001)
+            for: 2m
+            labels:
+              severity: critical
+              team: platform
+              slo: availability
+            annotations:
+              summary: "Availability SLO burn rate critical (14.4x)"
+              description: "Error rate {{ "{{" }} $value | humanizePercentage {{ "}}" }} burning budget at 14.4x."
+              runbook_url: "https://docs.krystaline.io/runbooks/slo-availability"
+
+          - alert: SLOAvailabilityBurnRateHigh
+            expr: |
+              slo:http_requests:error_ratio_6h > (6 * 0.001)
+              and
+              slo:http_requests:error_ratio_30m > (6 * 0.001)
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+              slo: availability
+            annotations:
+              summary: "Availability SLO burn rate high (6x)"
+              description: "Error rate {{ "{{" }} $value | humanizePercentage {{ "}}" }} burning budget at 6x."
+
+          - alert: SLOAvailabilityBurnRateElevated
+            expr: |
+              slo:http_requests:error_ratio_1d > (3 * 0.001)
+              and
+              slo:http_requests:error_ratio_2h > (3 * 0.001)
+            for: 15m
+            labels:
+              severity: warning
+              team: platform
+              slo: availability
+            annotations:
+              summary: "Availability SLO burn rate elevated (3x)"
+              description: "Sustained error rate burning budget at 3x."
+
+      # ============================================
+      # SLO BURN RATE ALERTS — LATENCY
+      # SLO: 95% of requests < 500ms
+      # ============================================
+      - name: krystalinex.slo.latency
+        rules:
+          - alert: SLOLatencyBurnRateCritical
+            expr: |
+              (1 - slo:http_request_duration:ratio_below_500ms_1h) > (14.4 * 0.05)
+              and
+              (1 - slo:http_request_duration:ratio_below_500ms_5m) > (14.4 * 0.05)
+            for: 2m
+            labels:
+              severity: critical
+              team: platform
+              slo: latency
+            annotations:
+              summary: "Latency SLO burn rate critical"
+              description: "Latency budget burning at 14.4x."
+              runbook_url: "https://docs.krystaline.io/runbooks/slo-latency"
+
+          - alert: SLOLatencyBurnRateHigh
+            expr: |
+              (1 - slo:http_request_duration:ratio_below_500ms_1d) > (3 * 0.05)
+              and
+              (1 - slo:http_request_duration:ratio_below_500ms_1h) > (3 * 0.05)
+            for: 15m
+            labels:
+              severity: warning
+              team: platform
+              slo: latency
+            annotations:
+              summary: "Latency SLO burn rate elevated"
+              description: "Sustained slow requests burning latency budget at 3x."
+
+      # ============================================
+      # REDIS ALERTS
+      # ============================================
+      - name: krystalinex.redis
+        rules:
+          - alert: RedisDown
+            expr: redis_up == 0
+            for: 1m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "Redis instance is down"
+              description: "Redis has been unreachable for more than 1 minute. Caching layer is offline."
+
+          - alert: RedisMemoryHigh
+            expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Redis memory usage above 85%"
+              description: "Redis is using {{ "{{" }} $value | humanizePercentage {{ "}}" }} of max memory."
+
+          - alert: RedisConnectedClientsHigh
+            expr: redis_connected_clients > 100
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Redis has high connected clients"
+              description: "Unusually high number of Redis client connections. Check for connection leaks."
+
+          - alert: RedisKeyEviction
+            expr: rate(redis_evicted_keys_total[5m]) > 0
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Redis is evicting keys"
+              description: "Redis is actively evicting keys due to memory pressure."
+
+      # ============================================
+      # CONTAINER HEALTH ALERTS
+      # ============================================
+      - name: krystalinex.container_health
+        rules:
+          - alert: ContainerCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) * 60 * 15 > 3
             for: 5m
             labels:
               severity: critical
-              service: sla
+              team: platform
             annotations:
-              summary: "Availability SLA at risk"
-              description: "Current availability is {{ "{{" }} $value | humanizePercentage {{ "}}" }} (SLA: 99.9%)"
+              summary: "Container is crash-looping"
+              description: "A container has restarted multiple times in the last 15 minutes."
 
-          - alert: LatencySLABreach
+          - alert: ContainerOOMKilled
+            expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+            for: 0m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Container was OOM killed"
+              description: "A container was terminated due to OOM. Consider increasing memory limits."
+
+          - alert: PodNotReady
             expr: |
-              histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1h])) by (le)) > 0.5
+              min_over_time(kube_pod_status_ready{condition="true", namespace="krystalinex"}[5m]) == 0
             for: 10m
             labels:
               severity: warning
-              service: sla
+              team: platform
             annotations:
-              summary: "Latency SLA at risk"
-              description: "P95 latency is {{ "{{" }} $value | humanizeDuration {{ "}}" }} (SLA: 500ms)"
+              summary: "Pod has been not ready for 10m"
+              description: "A pod has been in a non-ready state for more than 10 minutes."
+
+          - alert: DeploymentReplicasMismatch
+            expr: |
+              kube_deployment_spec_replicas{namespace="krystalinex"}
+                != kube_deployment_status_ready_replicas{namespace="krystalinex"}
+            for: 10m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Deployment replica mismatch"
+              description: "A deployment does not have the desired number of ready replicas."
+
+  recording-rules.yml: |
+    groups:
+      - name: slo:error_rates
+        interval: 30s
+        rules:
+          - record: slo:http_requests:error_ratio_5m
+            expr: |
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[5m])) or vector(0))
+              /
+              (sum(rate(http_requests_total[5m])) > 0)
+              or vector(0)
+          - record: slo:http_requests:error_ratio_30m
+            expr: |
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[30m])) or vector(0))
+              /
+              (sum(rate(http_requests_total[30m])) > 0)
+              or vector(0)
+          - record: slo:http_requests:error_ratio_1h
+            expr: |
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[1h])) or vector(0))
+              /
+              (sum(rate(http_requests_total[1h])) > 0)
+              or vector(0)
+          - record: slo:http_requests:error_ratio_2h
+            expr: |
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[2h])) or vector(0))
+              /
+              (sum(rate(http_requests_total[2h])) > 0)
+              or vector(0)
+          - record: slo:http_requests:error_ratio_6h
+            expr: |
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[6h])) or vector(0))
+              /
+              (sum(rate(http_requests_total[6h])) > 0)
+              or vector(0)
+          - record: slo:http_requests:error_ratio_1d
+            expr: |
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[1d])) or vector(0))
+              /
+              (sum(rate(http_requests_total[1d])) > 0)
+              or vector(0)
+          - record: slo:http_requests:error_ratio_3d
+            expr: |
+              (sum(rate(http_request_errors_total{status_code=~"5.."}[3d])) or vector(0))
+              /
+              (sum(rate(http_requests_total[3d])) > 0)
+              or vector(0)
+
+      - name: slo:latency
+        interval: 30s
+        rules:
+          - record: slo:http_request_duration:ratio_below_500ms_5m
+            expr: |
+              sum(rate(http_request_duration_seconds_bucket{le="0.5"}[5m]))
+              /
+              (sum(rate(http_request_duration_seconds_count[5m])) > 0)
+              or vector(1)
+          - record: slo:http_request_duration:ratio_below_500ms_1h
+            expr: |
+              sum(rate(http_request_duration_seconds_bucket{le="0.5"}[1h]))
+              /
+              (sum(rate(http_request_duration_seconds_count[1h])) > 0)
+              or vector(1)
+          - record: slo:http_request_duration:ratio_below_500ms_1d
+            expr: |
+              sum(rate(http_request_duration_seconds_bucket{le="0.5"}[1d]))
+              /
+              (sum(rate(http_request_duration_seconds_count[1d])) > 0)
+              or vector(1)
+          - record: slo:http_request_duration:ratio_below_2s_5m
+            expr: |
+              sum(rate(http_request_duration_seconds_bucket{le="2"}[5m]))
+              /
+              (sum(rate(http_request_duration_seconds_count[5m])) > 0)
+              or vector(1)
+          - record: slo:http_request_duration:p95_5m
+            expr: |
+              histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+          - record: slo:http_request_duration:p99_5m
+            expr: |
+              histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+          - record: slo:http_request_duration:p95_1h
+            expr: |
+              histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1h])) by (le))
+          - record: slo:http_request_duration:p99_1h
+            expr: |
+              histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[1h])) by (le))
+
+      - name: slo:error_budget
+        interval: 1m
+        rules:
+          - record: slo:availability:error_budget_remaining
+            expr: |
+              1 - (
+                slo:http_requests:error_ratio_1d
+                / (1 - 0.999)
+              )
+          - record: slo:latency:error_budget_remaining
+            expr: |
+              1 - (
+                (1 - slo:http_request_duration:ratio_below_500ms_1d)
+                / (1 - 0.95)
+              )
 {{- end }}
 ---
 {{- if .Values.otelCollector.enabled }}

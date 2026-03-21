@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger('Login');
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,10 +44,7 @@ export default function Login() {
                 setTempToken(data.tempToken);
                 setError("");
             } else {
-                // DEBUG: Log what we're storing
-                console.log('[Login] Login response data.user:', data.user);
-                console.log('[Login] User ID:', data.user?.id);
-                console.log('[Login] User ID type:', typeof data.user?.id);
+                log.info({ userId: data.user?.id, idType: typeof data.user?.id }, 'Login successful');
 
                 // Normal login - store tokens and redirect
                 localStorage.setItem("accessToken", data.tokens.accessToken);

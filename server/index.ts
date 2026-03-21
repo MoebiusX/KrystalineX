@@ -23,12 +23,14 @@ import { rabbitMQClient } from "./services/rabbitmq-client";
 import { monitorRoutes, startMonitor } from "./monitor";
 import { metricsMiddleware, registerMetricsEndpoint } from "./metrics/prometheus";
 import { transparencyService } from "./services/transparency-service";
+import { getRedisClient } from "./lib/redis";
 import authRoutes from "./auth/routes";
 import walletRoutes from "./wallet/routes";
 import tradeRoutes from "./trade/routes";
 import publicRoutes from "./api/public-routes";
 import healthRoutes from "./api/health-routes";
 import { binanceFeed } from "./services/binance-feed";
+import { createUserContextMiddleware } from "./middleware/user-context";
 
 const logger = createLogger('server');
 const app = express();
@@ -67,6 +69,9 @@ app.use(express.urlencoded({ extended: false }));
 
 // CORS configuration (environment-aware)
 app.use(corsMiddleware);
+
+// Propagate authenticated user ID to OTEL spans
+app.use(createUserContextMiddleware());
 
 (async () => {
   // Initialize PostgreSQL storage FIRST (before any routes use it)
@@ -133,6 +138,10 @@ app.use(corsMiddleware);
   app.use('/api/v1/monitor', monitorRoutes);
   app.use('/api/monitor', monitorRoutes);
 
+  // Register auto-remediation webhook (Alertmanager → automated safe actions)
+  const autoRemediationRoutes = (await import('./monitor/auto-remediation')).default;
+  app.use('/api/v1/monitor', autoRemediationRoutes);
+
   // Register public transparency routes (unauthenticated)
   app.use('/api/v1/public', publicRoutes);
 
@@ -141,6 +150,9 @@ app.use(corsMiddleware);
 
   // Start transparency service for public metrics
   transparencyService.start();
+
+  // Initialize Redis for caching and rate limiting
+  getRedisClient();
 
   // Create server
   const { createServer } = await import("http");
@@ -242,6 +254,15 @@ app.use(corsMiddleware);
       logger.info('Database connections closed');
     } catch (error) {
       logger.error({ err: error }, 'Error closing database');
+    }
+
+    // Close Redis connection
+    try {
+      const { closeRedis } = await import('./lib/redis');
+      await closeRedis();
+      logger.info('Redis connection closed');
+    } catch (error) {
+      logger.error({ err: error }, 'Error closing Redis');
     }
 
     logger.info('Graceful shutdown complete');
