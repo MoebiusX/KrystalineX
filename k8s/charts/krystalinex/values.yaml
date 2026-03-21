@@ -4,7 +4,7 @@
 global:
   imageRegistry: ""
   imagePullSecrets: []
-  storageClass: ""
+  storageClass: "local-storage"
 
 # Enable secret creation (for local dev)
 secrets:
@@ -18,19 +18,19 @@ server:
   enabled: true
   replicaCount: 1
   image:
-    repository: 192.168.1.32:5000/krystalinex/server
-    tag: v2.0.0
+    repository: moebiusx/krystalinex-server
+    tag: v2.4.1
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
     port: 5000
   resources:
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: "1"
+      memory: 1Gi
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 250m
+      memory: 512Mi
   # Horizontal Pod Autoscaler configuration
   autoscaling:
     enabled: false
@@ -177,6 +177,36 @@ redis:
       cpu: 100m
       memory: 128Mi
 
+postgresExporter:
+  enabled: false
+  image:
+    repository: prometheuscommunity/postgres-exporter
+    tag: latest
+
+goalert:
+  enabled: true
+  image:
+    repository: goalert/goalert
+    tag: latest
+  persistence:
+    enabled: false
+    size: 5Gi
+
+alertmanager:
+  enabled: true
+  image:
+    repository: prom/alertmanager
+    tag: latest
+  persistence:
+    enabled: false
+    size: 5Gi
+
+nodeExporter:
+  enabled: true
+  image:
+    repository: prom/node-exporter
+    tag: latest
+
 # =============================================================================
 # OBSERVABILITY STACK
 # =============================================================================
@@ -195,10 +225,10 @@ jaeger:
   resources:
     limits:
       cpu: 1000m
-      memory: 4Gi
+      memory: 3Gi
     requests:
       cpu: 100m
-      memory: 2Gi
+      memory: 1Gi
 
 otelCollector:
   enabled: true
@@ -213,11 +243,11 @@ otelCollector:
     existingConfigMap: otel-collector-config
   resources:
     limits:
-      cpu: 200m
-      memory: 256Mi
+      cpu: 500m
+      memory: 512Mi
     requests:
-      cpu: 50m
-      memory: 128Mi
+      cpu: 100m
+      memory: 256Mi
 
 prometheus:
   enabled: true
@@ -362,16 +392,16 @@ kubeStateMetrics:
 # =============================================================================
 
 networkPolicy:
-  enabled: true
-  # Default deny all ingress, allow specific pod-to-pod communication
+  enabled: false
+  # TODO: Re-enable after adding ingress rules for PostgreSQL, RabbitMQ, Redis, Grafana, Jaeger, GoAlert-DB
 
 ingress:
   enabled: true
-  className: kong  # or nginx
+  className: nginx
   annotations:
     kubernetes.io/tls-acme: "true"
   hosts:
-    - host: krystalinex.local
+    - host: www.krystaline.io
       paths:
         - path: /
           pathType: Prefix
@@ -379,6 +409,18 @@ ingress:
         - path: /api
           pathType: Prefix
           service: server
+        - path: /grafana
+          pathType: Prefix
+          service: grafana
+        - path: /jaeger
+          pathType: Prefix
+          service: jaeger
+        - path: /prometheus
+          pathType: Prefix
+          service: prometheus
+        - path: /alertmanager
+          pathType: Prefix
+          service: alertmanager
   tls: []
   #  - secretName: krystalinex-tls
   #    hosts:

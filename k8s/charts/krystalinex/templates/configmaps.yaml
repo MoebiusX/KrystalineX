@@ -63,10 +63,12 @@ data:
         scrape_interval: 15s
 
       # PostgreSQL Exporter (app database metrics)
+      {{- if .Values.postgresExporter.enabled }}
       - job_name: 'postgres-exporter'
         static_configs:
           - targets: ['{{ include "krystalinex.fullname" . }}-postgres-exporter:9187']
         scrape_interval: 15s
+      {{- end }}
 
       # Kube State Metrics (K8s object metrics - pods, deployments, nodes)
       {{- if .Values.kubeStateMetrics.enabled }}
@@ -81,11 +83,13 @@ data:
       # ============================================
 
       # Ollama (LLM inference)
+      {{- if .Values.ollama.enabled }}
       - job_name: 'ollama'
         static_configs:
           - targets: ['{{ include "krystalinex.fullname" . }}-ollama:11434']
         metrics_path: /metrics
         scrape_interval: 30s
+      {{- end }}
 
       # ============================================
       # OBSERVABILITY STACK
@@ -117,6 +121,11 @@ data:
           - targets: ['{{ include "krystalinex.fullname" . }}-grafana:3000']
         metrics_path: /grafana/metrics
         scrape_interval: 30s
+
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-redis-exporter:9121']
+        scrape_interval: 15s
 
   alerting-rules.yml: |
     # KrystalineX Prometheus Alerting Rules
@@ -614,6 +623,99 @@ data:
             annotations:
               summary: "Latency SLO burn rate elevated"
               description: "Sustained slow requests burning latency budget at 3x."
+
+      # ============================================
+      # REDIS ALERTS
+      # ============================================
+      - name: krystalinex.redis
+        rules:
+          - alert: RedisDown
+            expr: redis_up == 0
+            for: 1m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "Redis instance is down"
+              description: "Redis has been unreachable for more than 1 minute. Caching layer is offline."
+
+          - alert: RedisMemoryHigh
+            expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Redis memory usage above 85%"
+              description: "Redis is using {{ "{{" }} $value | humanizePercentage {{ "}}" }} of max memory."
+
+          - alert: RedisConnectedClientsHigh
+            expr: redis_connected_clients > 100
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Redis has high connected clients"
+              description: "Unusually high number of Redis client connections. Check for connection leaks."
+
+          - alert: RedisKeyEviction
+            expr: rate(redis_evicted_keys_total[5m]) > 0
+            for: 5m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Redis is evicting keys"
+              description: "Redis is actively evicting keys due to memory pressure."
+
+      # ============================================
+      # CONTAINER HEALTH ALERTS
+      # ============================================
+      - name: krystalinex.container_health
+        rules:
+          - alert: ContainerCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) * 60 * 15 > 3
+            for: 5m
+            labels:
+              severity: critical
+              team: platform
+            annotations:
+              summary: "Container is crash-looping"
+              description: "A container has restarted multiple times in the last 15 minutes."
+
+          - alert: ContainerOOMKilled
+            expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+            for: 0m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Container was OOM killed"
+              description: "A container was terminated due to OOM. Consider increasing memory limits."
+
+          - alert: PodNotReady
+            expr: |
+              min_over_time(kube_pod_status_ready{condition="true", namespace="krystalinex"}[5m]) == 0
+            for: 10m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Pod has been not ready for 10m"
+              description: "A pod has been in a non-ready state for more than 10 minutes."
+
+          - alert: DeploymentReplicasMismatch
+            expr: |
+              kube_deployment_spec_replicas{namespace="krystalinex"}
+                != kube_deployment_status_ready_replicas{namespace="krystalinex"}
+            for: 10m
+            labels:
+              severity: warning
+              team: platform
+            annotations:
+              summary: "Deployment replica mismatch"
+              description: "A deployment does not have the desired number of ready replicas."
 
   recording-rules.yml: |
     groups:
