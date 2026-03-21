@@ -163,6 +163,20 @@ rabbitmq:
   metrics:
     enabled: true
 
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+  maxmemory: "256mb"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 # =============================================================================
 # OBSERVABILITY STACK
 # =============================================================================

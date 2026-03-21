@@ -64,6 +64,11 @@ const configSchema = z.object({
     lokiUrl: z.string().default('http://localhost:3100'),
   }),
 
+  redis: z.object({
+    url: z.string().default('redis://localhost:6379'),
+    keyPrefix: z.string().default('kx:'),
+  }),
+
   ai: z.object({
     ollamaUrl: z.string().default('http://localhost:11434'),
     model: z.string().default('llama3.2:1b'),
@@ -190,6 +195,11 @@ function loadConfig() {
       prometheusUrl: process.env.PROMETHEUS_URL || 'http://localhost:9090',
       otelCollectorUrl: process.env.OTEL_COLLECTOR_URL,
       lokiUrl: process.env.LOKI_URL || 'http://localhost:3100',
+    },
+
+    redis: {
+      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      keyPrefix: process.env.REDIS_KEY_PREFIX || 'kx:',
     },
 
     ai: process.env.OLLAMA_URL ? {

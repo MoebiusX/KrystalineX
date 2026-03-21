@@ -84,6 +84,8 @@ spec:
               value: "http://{{ include "krystalinex.fullname" . }}-prometheus:9090/prometheus"
             - name: LOKI_URL
               value: "http://{{ include "krystalinex.fullname" . }}-loki:3100"
+            - name: REDIS_URL
+              value: "redis://{{ include "krystalinex.fullname" . }}-redis:6379"
             - name: OLLAMA_MODEL
               value: "XavierThibaudon/anomaly-analyzer"
             - name: RATE_LIMIT_GENERAL
