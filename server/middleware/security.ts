@@ -6,10 +6,12 @@
  */
 
 import rateLimit from 'express-rate-limit';
+import RedisStore from 'rate-limit-redis';
 import helmet from 'helmet';
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 import { createLogger } from '../lib/logger';
+import { getRedisClient } from '../lib/redis';
 import { recordRateLimitExceeded } from '../observability/security-events';
 
 const logger = createLogger('security');
@@ -17,6 +19,7 @@ const logger = createLogger('security');
 // ============================================
 // RATE LIMITING
 // Defaults are safe for production. Override via env vars for load testing.
+// Uses Redis store when available for horizontal scaling.
 // ============================================
 
 const RATE_LIMIT_GENERAL = parseInt(process.env.RATE_LIMIT_GENERAL || '300', 10);
@@ -26,12 +29,33 @@ const RATE_LIMIT_SENSITIVE = parseInt(process.env.RATE_LIMIT_SENSITIVE || '15', 
 logger.info({ general: RATE_LIMIT_GENERAL, auth: RATE_LIMIT_AUTH, sensitive: RATE_LIMIT_SENSITIVE }, 'Rate limits configured');
 
 /**
+ * Create a Redis-backed store for rate limiting.
+ * Falls back to in-memory if Redis is unavailable.
+ */
+function createRateLimitStore(prefix: string): { store?: InstanceType<typeof RedisStore> } {
+  const redis = getRedisClient();
+  if (!redis) {
+    logger.warn({ prefix }, 'Redis unavailable — rate limiter using in-memory store (not suitable for horizontal scaling)');
+    return {};
+  }
+
+  return {
+    store: new RedisStore({
+      // Use sendCommand for ioredis compatibility
+      sendCommand: (...args: string[]) => redis.call(args[0], ...args.slice(1)) as any,
+      prefix: `rl:${prefix}:`,
+    }),
+  };
+}
+
+/**
  * General API rate limiter
  * Default: 300 requests per minute per IP (override: RATE_LIMIT_GENERAL)
  */
 export const generalRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: RATE_LIMIT_GENERAL,
+  ...createRateLimitStore('general'),
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many requests',
@@ -65,6 +89,7 @@ export const generalRateLimiter = rateLimit({
 export const authRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: RATE_LIMIT_AUTH,
+  ...createRateLimitStore('auth'),
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many authentication attempts',
@@ -98,6 +123,7 @@ export const authRateLimiter = rateLimit({
 export const sensitiveRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: RATE_LIMIT_SENSITIVE,
+  ...createRateLimitStore('sensitive'),
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
   message: {
     error: 'Too many attempts',

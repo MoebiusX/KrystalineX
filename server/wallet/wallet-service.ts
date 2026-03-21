@@ -9,6 +9,7 @@ import db from '../db';
 import { createLogger } from '../lib/logger';
 import { WalletError, ValidationError, NotFoundError, InsufficientFundsError } from '../lib/errors';
 import { generateWalletAddress, generateWalletId, SEED_WALLETS } from '../storage';
+import { cacheGet, cacheSet, cacheDel } from '../lib/redis';
 
 const logger = createLogger('wallet');
 
@@ -162,10 +163,18 @@ export const walletService = {
         const dbUserId = await resolveUserId(userId);
         if (!dbUserId) return [];
 
+        // Check Redis cache (10s TTL — balances can change on trades)
+        const cacheKey = `wallet:${dbUserId}`;
+        const cached = await cacheGet<Wallet[]>(cacheKey);
+        if (cached) return cached;
+
         const result = await db.query(
             `SELECT * FROM wallets WHERE user_id = $1 ORDER BY asset`,
             [dbUserId]
         );
+
+        // Cache for 10 seconds
+        await cacheSet(cacheKey, result.rows, 10);
 
         // Address is now stored in DB, no fallback needed
         return result.rows;
@@ -260,6 +269,10 @@ export const walletService = {
                 amount,
                 type
             }, 'Wallet credited');
+
+            // Invalidate wallet cache after credit
+            await cacheDel(`wallet:${dbUserId}`);
+
             return txResult.rows[0];
         });
     },
@@ -318,6 +331,10 @@ export const walletService = {
                 amount,
                 type
             }, 'Wallet debited');
+
+            // Invalidate wallet cache after debit
+            await cacheDel(`wallet:${dbUserId}`);
+
             return txResult.rows[0];
         });
     },
@@ -335,6 +352,8 @@ export const walletService = {
              WHERE user_id = $2 AND asset = $3 AND available >= $1`,
             [amount, dbUserId, asset.toUpperCase()]
         );
+
+        await cacheDel(`wallet:${dbUserId}`);
     },
 
     /**
@@ -350,6 +369,8 @@ export const walletService = {
              WHERE user_id = $2 AND asset = $3 AND locked >= $1`,
             [amount, dbUserId, asset.toUpperCase()]
         );
+
+        await cacheDel(`wallet:${dbUserId}`);
     },
 
     /**
@@ -484,6 +505,10 @@ export const walletService = {
                 amount
             }, 'P2P Transfer completed');
 
+            // Invalidate both users' wallet caches
+            await cacheDel(`wallet:${dbFromUserId}`);
+            await cacheDel(`wallet:${dbToUserId}`);
+
             return {
                 success: true,
                 fromBalance: updatedSender.rows[0].available,
@@ -573,6 +598,10 @@ export const walletService = {
         }
 
         logger.debug({ userId, asset, newBalance }, 'Balance updated');
+
+        // Invalidate wallet cache
+        await cacheDel(`wallet:${resolvedId}`);
+
         return true;
     }
 };

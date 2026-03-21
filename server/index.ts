@@ -23,6 +23,7 @@ import { rabbitMQClient } from "./services/rabbitmq-client";
 import { monitorRoutes, startMonitor } from "./monitor";
 import { metricsMiddleware, registerMetricsEndpoint } from "./metrics/prometheus";
 import { transparencyService } from "./services/transparency-service";
+import { getRedisClient } from "./lib/redis";
 import authRoutes from "./auth/routes";
 import walletRoutes from "./wallet/routes";
 import tradeRoutes from "./trade/routes";
@@ -150,6 +151,9 @@ app.use(createUserContextMiddleware());
   // Start transparency service for public metrics
   transparencyService.start();
 
+  // Initialize Redis for caching and rate limiting
+  getRedisClient();
+
   // Create server
   const { createServer } = await import("http");
   const server = createServer(app);
@@ -250,6 +254,15 @@ app.use(createUserContextMiddleware());
       logger.info('Database connections closed');
     } catch (error) {
       logger.error({ err: error }, 'Error closing database');
+    }
+
+    // Close Redis connection
+    try {
+      const { closeRedis } = await import('./lib/redis');
+      await closeRedis();
+      logger.info('Redis connection closed');
+    } catch (error) {
+      logger.error({ err: error }, 'Error closing Redis');
     }
 
     logger.info('Graceful shutdown complete');

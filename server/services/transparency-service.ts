@@ -13,6 +13,7 @@ import { traceProfiler } from '../monitor/trace-profiler';
 import { anomalyDetector } from '../monitor/anomaly-detector';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
+import { cacheGet, cacheSet } from '../lib/redis';
 import {
   systemStatusSchema,
   publicTradeSchema,
@@ -61,6 +62,10 @@ class TransparencyService {
    */
   async getSystemStatus(): Promise<SystemStatus> {
     try {
+      // Check Redis cache first (30s TTL)
+      const cached = await cacheGet<SystemStatus>('status:system');
+      if (cached) return cached;
+
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
@@ -210,6 +215,10 @@ class TransparencyService {
       // Validate response before returning
       const validatedStatus = systemStatusSchema.parse(status);
       logger.info({ status: validatedStatus.status, uptime: validatedStatus.uptime }, 'Generated system status');
+
+      // Cache for 30 seconds
+      await cacheSet('status:system', validatedStatus, 30);
+
       return validatedStatus;
     } catch (error: unknown) {
       logger.error({ err: error }, 'Failed to generate system status');
@@ -222,6 +231,11 @@ class TransparencyService {
    */
   async getPublicTrades(limit: number = 20): Promise<PublicTrade[]> {
     try {
+      // Check Redis cache first (15s TTL — trades change but N+1 Jaeger calls are expensive)
+      const cacheKey = `trades:public:${limit}`;
+      const cached = await cacheGet<PublicTrade[]>(cacheKey);
+      if (cached) return cached;
+
       // Fetch more trades than needed since we'll filter out ones without traces
       const result = await db.query(
         `SELECT 
@@ -312,6 +326,10 @@ class TransparencyService {
       }
 
       logger.info({ count: publicTrades.length }, 'Retrieved public trades with verified traces');
+
+      // Cache for 15 seconds
+      await cacheSet(cacheKey, publicTrades, 15);
+
       return publicTrades;
     } catch (error: unknown) {
       logger.error({ err: error }, 'Failed to get public trades');
@@ -325,6 +343,10 @@ class TransparencyService {
    */
   async getTransparencyMetrics(): Promise<TransparencyMetrics> {
     try {
+      // Check Redis cache first (30s TTL)
+      const cached = await cacheGet<TransparencyMetrics>('metrics:transparency');
+      if (cached) return cached;
+
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const lastHour = new Date(now.getTime() - 60 * 60 * 1000);
@@ -398,6 +420,10 @@ class TransparencyService {
       // Validate response before returning
       const validatedMetrics = transparencyMetricsSchema.parse(metrics);
       logger.info('Generated transparency metrics');
+
+      // Cache for 30 seconds
+      await cacheSet('metrics:transparency', validatedMetrics, 30);
+
       return validatedMetrics;
     } catch (error: unknown) {
       logger.error({ err: error }, 'Failed to generate transparency metrics');
