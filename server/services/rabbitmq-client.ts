@@ -4,7 +4,8 @@ import { config } from '../config';
 import { createLogger } from '../lib/logger';
 import { ExternalServiceError, TimeoutError, getErrorMessage } from '../lib/errors';
 import { createCircuitBreaker, CircuitBreaker } from '../lib/circuit-breaker';
-import { recordCircuitBreakerTrip } from '../metrics/prometheus';
+import { recordCircuitBreakerTrip, recordCircuitBreakerState } from '../metrics/prometheus';
+import { rabbitmqQueueDepth } from '../metrics/prometheus';
 
 const logger = createLogger('rabbitmq');
 
@@ -80,6 +81,11 @@ export class RabbitMQClient {
       logger.info({
         queues: [this.ORDERS_QUEUE, this.RESPONSE_QUEUE, this.LEGACY_QUEUE, this.LEGACY_RESPONSE],
       }, 'RabbitMQ connected successfully');
+
+      // Set initial circuit breaker state and start queue depth polling
+      recordCircuitBreakerState('rabbitmq', 'CLOSED');
+      this.startQueueDepthPolling();
+
       return true;
     } catch (error) {
       logger.error({ err: error }, 'RabbitMQ connection failed');
@@ -308,6 +314,22 @@ export class RabbitMQClient {
     } catch (error: unknown) {
       logger.error({ err: error }, 'Error disconnecting from RabbitMQ');
     }
+  }
+
+  private startQueueDepthPolling(): void {
+    const poll = async () => {
+      if (!this.channel) return;
+      try {
+        for (const queue of [this.LEGACY_QUEUE, this.LEGACY_RESPONSE]) {
+          const info = await this.channel.checkQueue(queue);
+          rabbitmqQueueDepth.set({ queue }, info.messageCount);
+        }
+      } catch (err) {
+        logger.debug({ err }, 'Queue depth poll failed');
+      }
+    };
+    poll();
+    setInterval(poll, 30_000);
   }
 
   isConnected(): boolean {

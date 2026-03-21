@@ -12,6 +12,7 @@ import { streamAnalyzer } from './stream-analyzer';
 import { config } from '../config';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
+import { recordAnomalyDetected } from '../metrics/prometheus';
 
 const logger = createLogger('anomaly-detector');
 const JAEGER_API_URL = config.observability.jaegerUrl;
@@ -178,6 +179,7 @@ export class AnomalyDetector {
 
                         this.anomalies.set(anomaly.id, anomaly);
                         newAnomalies++;
+                        recordAnomalyDetected(anomaly.service, anomaly.severity);
 
                         // Stream SEV1-3 anomalies for real-time LLM analysis
                         if (anomaly.severity <= 3) {

@@ -435,6 +435,20 @@ services:
       - kong-net
     restart: unless-stopped
 
+  # Redis Exporter - Redis metrics for Prometheus
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "9121:9121"
+    networks:
+      - kong-net
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   # NOTE: Node.js services (kx-exchange, payment-processor, frontend) run natively on the host.
   # Start them with: npm run dev (or individual scripts)
   # This avoids Docker overhead and enables faster development iteration.
