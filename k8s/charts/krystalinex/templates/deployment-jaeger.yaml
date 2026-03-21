@@ -36,7 +36,7 @@ spec:
             - name: QUERY_BASE_PATH
               value: "/jaeger"
             - name: MEMORY_MAX_TRACES
-              value: "200000"
+              value: "100000"
           livenessProbe:
             httpGet:
               path: /
