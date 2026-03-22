@@ -131,18 +131,7 @@ postgresql:
         memory: 256Mi
 
 kongPostgresql:
-  enabled: true
-  auth:
-    username: kong
-    database: kong
-    existingSecret: krystalinex-kong-secrets
-    secretKeys:
-      adminPasswordKey: postgres-password
-      userPasswordKey: password
-  primary:
-    persistence:
-      enabled: true
-      size: 5Gi
+  enabled: false  # DB-less mode — declarative config via ConfigMap
 
 rabbitmq:
   enabled: true
@@ -306,27 +295,23 @@ promtail:
 
 kong:
   enabled: true
+  replicaCount: 1
   image:
-    repository: kong/kong-gateway
-    tag: latest
+    repository: kong
+    tag: "3.9"
+    pullPolicy: IfNotPresent
   service:
-    type: LoadBalancer  # For external access
+    type: ClusterIP
     ports:
       proxy: 8000
-      proxySSL: 8443
       admin: 8001
-      manager: 8002
-  env:
-    database: postgres
-    pg_host: "{{ .Release.Name }}-kongdatabase-postgresql"
-    pg_user: kong
   resources:
     limits:
       cpu: 500m
-      memory: 512Mi
+      memory: 1Gi
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
 
 # =============================================================================
 # OPTIONAL / DEV-ONLY SERVICES

@@ -38,9 +38,15 @@ spec:
                 port:
                   number: 80
                 {{- else if eq .service "server" }}
+                {{- if $.Values.kong.enabled }}
+                name: {{ include "krystalinex.fullname" $ }}-kong
+                port:
+                  number: 8000
+                {{- else }}
                 name: {{ include "krystalinex.fullname" $ }}-server
                 port:
                   number: 5000
+                {{- end }}
                 {{- else if eq .service "grafana" }}
                 name: {{ include "krystalinex.fullname" $ }}-grafana
                 port:
