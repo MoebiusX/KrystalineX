@@ -38,9 +38,26 @@ if (existsSync(envPath)) {
  * Set via: E2E_TARGET=remote or --remote CLI flag
  */
 const cliArgs = process.argv.slice(2);
+const pauseIndex = cliArgs.indexOf('--pause');
+const pauseArg = pauseIndex >= 0 ? cliArgs[pauseIndex + 1] : undefined;
 const isRemote = cliArgs.includes('--remote') ||
     process.env.E2E_TARGET === 'remote' ||
     process.env.E2E_TARGET === 'krystaline';
+
+function parsePauseSeconds(value) {
+    if (value === undefined) {
+        return 1;
+    }
+
+    if (!/^\d+$/.test(value)) {
+        console.error('❌ Invalid --pause value. Use a non-negative integer number of seconds.');
+        process.exit(1);
+    }
+
+    return parseInt(value, 10);
+}
+
+const retryPauseSeconds = parsePauseSeconds(process.env.E2E_RETRY_PAUSE_SECONDS || pauseArg);
 
 const REMOTE_BASE = process.env.REMOTE_URL || 'https://www.krystaline.io';
 
@@ -57,6 +74,12 @@ const config = {
     // Target environment
     isRemote,
     remoteBase: REMOTE_BASE,
+
+    // E2E configuration
+    e2e: {
+        retryPauseSeconds,
+        retryPauseMs: retryPauseSeconds * 1000,
+    },
 
     // Server
     server: {
@@ -189,6 +212,8 @@ console.log('   Timeouts (seconds):');
 console.log(`      Kong Admin: ${config.timeouts.kongAdmin}s, Proxy: ${config.timeouts.kongProxy}s`);
 console.log(`      RabbitMQ: ${config.timeouts.rabbitmq}s, Postgres: ${config.timeouts.postgres}s`);
 console.log(`      Server: ${config.timeouts.server}s`);
+console.log('   E2E:');
+console.log(`      Retry pause: ${config.e2e.retryPauseSeconds}s`);
 console.log('');
 
 export default config;
