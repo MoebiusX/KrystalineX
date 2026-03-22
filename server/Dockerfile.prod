@@ -18,9 +18,12 @@ COPY server ./server
 COPY shared ./shared
 COPY tsconfig.json ./
 
-# Bundle server into a single ESM file (external node_modules)
-# Exclude server/vite.ts — it's dev-only (dynamic import guarded by NODE_ENV check)
-RUN npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:./vite
+# Bundle OTEL setup as separate entry (must load BEFORE main bundle for ESM hook registration)
+# Then bundle the main server with ./otel marked external (resolved at runtime)
+# Fix ESM extension: Node.js ESM requires explicit .js extension on imports
+RUN npx esbuild server/otel.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/otel.js && \
+    npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:./vite --external:./otel && \
+    sed -i 's|import "./otel"|import "./otel.js"|' dist/index.js
 
 # Now install production-only deps for the final image
 RUN rm -rf node_modules && \
@@ -66,4 +69,6 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
-CMD ["node", "dist/index.js"]
+# --import loads OTEL before any other module, so auto-instrumentation hooks
+# (pg, http, amqplib) register before those modules are imported by the main bundle
+CMD ["node", "--import", "./dist/otel.js", "dist/index.js"]
