@@ -220,6 +220,8 @@ export class OrderService {
         }
 
         // Execute via RabbitMQ - MUST preserve the current context for proper trace propagation
+        // Capture POST span context BEFORE crossing the async boundary (RabbitMQ publish/consume)
+        // See: docs/observability/01_OTEL_TRACING_GUIDE.md §8 "Express Async Handler Context Loss"
         const currentContext = context.active();
         const activeSpanForRabbit = trace.getSpan(currentContext);
 
@@ -229,8 +231,7 @@ export class OrderService {
         }, 'Calling RabbitMQ with captured context');
 
         try {
-            // Execute within the captured context to ensure trace propagation
-            const publishPromise = rabbitMQClient.publishOrderAndWait({
+            const executionResponse = await rabbitMQClient.publishOrderAndWait({
                 orderId,
                 correlationId,
                 pair: request.pair,
@@ -243,8 +244,6 @@ export class OrderService {
                 userId,
                 timestamp: new Date().toISOString()
             }, 5000);
-
-            const executionResponse = await context.with(currentContext, () => publishPromise);
 
             const safeExecutionResponse = executionResponse ?? {
                 status: 'REJECTED',
@@ -265,55 +264,60 @@ export class OrderService {
                 processorId: safeExecutionResponse.processorId
             }, 'Order execution response received');
 
-            if (safeExecutionResponse.status === 'FILLED') {
-                try {
-                    await this.updateUserWallet(userId, request.side, request.quantity, safeExecutionResponse.fillPrice);
-                    // Emit business metrics for successful trade
-                    recordTrade(request.pair, request.side, request.quantity, safeExecutionResponse.totalValue);
-                    recordOrderMetrics(request.side, 'FILLED', 0); // Duration tracked separately
-                    // Check for whale transaction
-                    amountAnomalyDetector.checkOrder({
-                        orderId,
-                        userId,
-                        side: request.side,
-                        pair: request.pair,
-                        amount: request.quantity,
-                        traceId,
-                    });
-                    // Proof of Integrity™ — Generate ZK proof (non-blocking, fire-and-forget)
-                    zkProofService.generateTradeProof({
-                        orderId,
-                        traceId,
-                        fillPrice: safeExecutionResponse.fillPrice,
-                        quantity: request.quantity,
-                        userId,
-                        binancePrice: price,
-                    }).catch(err => logger.error({ err, orderId }, 'ZK proof generation failed'));
-                } catch (walletError: unknown) {
-                    // Wallet update failed (e.g., balance constraint violation)
-                    // Mark order as rejected to prevent stuck pending orders
-                    logger.error({
-                        err: walletError,
-                        orderId,
-                        userId,
-                        side: request.side,
-                        quantity: request.quantity
-                    }, 'Wallet update failed - marking order as rejected');
+            // Restore POST span context for post-processing (wallet update, ZK proof)
+            // After RabbitMQ round-trip, the active context may have shifted to the AMQP consumer context.
+            // context.with() ensures all child spans (PG queries, ZK proof) join the POST trace.
+            await context.with(currentContext, async () => {
+                if (safeExecutionResponse.status === 'FILLED') {
+                    try {
+                        await this.updateUserWallet(userId, request.side, request.quantity, safeExecutionResponse.fillPrice);
+                        // Emit business metrics for successful trade
+                        recordTrade(request.pair, request.side, request.quantity, safeExecutionResponse.totalValue);
+                        recordOrderMetrics(request.side, 'FILLED', 0); // Duration tracked separately
+                        // Check for whale transaction
+                        amountAnomalyDetector.checkOrder({
+                            orderId,
+                            userId,
+                            side: request.side,
+                            pair: request.pair,
+                            amount: request.quantity,
+                            traceId,
+                        });
+                        // Proof of Integrity™ — Generate ZK proof (non-blocking, fire-and-forget)
+                        zkProofService.generateTradeProof({
+                            orderId,
+                            traceId,
+                            fillPrice: safeExecutionResponse.fillPrice,
+                            quantity: request.quantity,
+                            userId,
+                            binancePrice: price,
+                        }).catch(err => logger.error({ err, orderId }, 'ZK proof generation failed'));
+                    } catch (walletError: unknown) {
+                        // Wallet update failed (e.g., balance constraint violation)
+                        // Mark order as rejected to prevent stuck pending orders
+                        logger.error({
+                            err: walletError,
+                            orderId,
+                            userId,
+                            side: request.side,
+                            quantity: request.quantity
+                        }, 'Wallet update failed - marking order as rejected');
 
-                    await this.updateOrderRecord(orderId, {
-                        status: 'REJECTED',
-                        fillPrice: safeExecutionResponse.fillPrice,
-                        totalValue: safeExecutionResponse.totalValue
-                    });
+                        await this.updateOrderRecord(orderId, {
+                            status: 'REJECTED',
+                            fillPrice: safeExecutionResponse.fillPrice,
+                            totalValue: safeExecutionResponse.totalValue
+                        });
 
-                    throw new OrderError('Settlement failed - order rejected');
+                        throw new OrderError('Settlement failed - order rejected');
+                    }
                 }
-            }
 
-            await this.updateOrderRecord(orderId, {
-                status: safeExecutionResponse.status as "PENDING" | "FILLED" | "REJECTED",
-                fillPrice: safeExecutionResponse.fillPrice,
-                totalValue: safeExecutionResponse.totalValue
+                await this.updateOrderRecord(orderId, {
+                    status: safeExecutionResponse.status as "PENDING" | "FILLED" | "REJECTED",
+                    fillPrice: safeExecutionResponse.fillPrice,
+                    totalValue: safeExecutionResponse.totalValue
+                });
             });
 
             return {

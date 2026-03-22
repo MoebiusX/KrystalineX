@@ -269,6 +269,12 @@ export class RabbitMQClient {
             status: response.status,
           }, 'Received execution response');
 
+          // Extract trace context from response headers (matcher sends original POST traceparent)
+          // This ensures the Promise continuation inherits the POST span context
+          // See: docs/observability/01_OTEL_TRACING_GUIDE.md §5 "RabbitMQ Consumer: Context Extraction"
+          const headers = msg.properties.headers || {};
+          const responseContext = propagation.extract(context.active(), headers);
+
           // Convert legacy response format
           const executionResponse: ExecutionResponse = {
             orderId: response.orderId || `ORD-${response.paymentId}`,
@@ -283,7 +289,11 @@ export class RabbitMQClient {
 
           const callback = this.pendingResponses.get(correlationId);
           if (callback) {
-            callback(executionResponse);
+            // Invoke within extracted context so Promise continuation (submitOrder)
+            // runs with POST span as parent — wallet update + ZK proof spans join the trace
+            context.with(responseContext, () => {
+              callback(executionResponse);
+            });
             logger.debug({ correlationId }, 'Execution delivered to waiting caller');
           } else {
             logger.warn({ correlationId }, 'No pending callback found for execution response');
