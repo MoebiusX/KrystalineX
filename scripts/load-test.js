@@ -32,7 +32,7 @@ function getArg(name, fallback) {
 }
 
 const PROFILES = {
-    smoke:  { vus: 5,    durationSec: 30,   rampUpSec: 5  },
+    smoke:  { vus: 5,    durationSec: 36000,   rampUpSec: 5  },
     light:  { vus: 25,   durationSec: 120,  rampUpSec: 15 },
     medium: { vus: 100,  durationSec: 300,  rampUpSec: 30 },
     heavy:  { vus: 500,  durationSec: 600,  rampUpSec: 60 },
