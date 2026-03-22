@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
 
       - name: Install dependencies
@@ -50,7 +50,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
 
       - name: Install dependencies
@@ -75,13 +75,13 @@ jobs:
 
       - name: Validate Prometheus alerting rules
         run: |
-          docker run --rm -v ${{ github.workspace }}/config:/config \
-            prom/prometheus:v3.3.0 promtool check rules /config/alerting-rules.yml
+          docker run --rm --entrypoint promtool -v ${{ github.workspace }}/config:/config \
+            prom/prometheus:v3.3.0 check rules /config/alerting-rules.yml
 
       - name: Validate Prometheus recording rules
         run: |
-          docker run --rm -v ${{ github.workspace }}/config:/config \
-            prom/prometheus:v3.3.0 promtool check rules /config/recording-rules.yml
+          docker run --rm --entrypoint promtool -v ${{ github.workspace }}/config:/config \
+            prom/prometheus:v3.3.0 check rules /config/recording-rules.yml
 
       - name: Validate OTEL Collector config
         run: |
@@ -92,7 +92,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
 
       - name: Install dependencies
