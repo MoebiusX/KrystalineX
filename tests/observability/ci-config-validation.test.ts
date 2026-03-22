@@ -253,7 +253,7 @@ describe('Cap 8A: CI Configuration Validation', () => {
             expect(jaegerDs.jsonData.nodeGraph.enabled).toBe(true);
         });
 
-        it('K8s datasource should have exemplarTraceIdDestinations with direct Explore URL', () => {
+        it('K8s datasource should have exemplarTraceIdDestinations linked to Jaeger', () => {
             const k8sPath = path.resolve(
                 __dirname,
                 '../../k8s/charts/krystalinex/templates/configmap-grafana-datasources.yaml'
@@ -261,8 +261,7 @@ describe('Cap 8A: CI Configuration Validation', () => {
             const content = fs.readFileSync(k8sPath, 'utf-8');
             expect(content).toContain('exemplarTraceIdDestinations');
             expect(content).toContain('traceID');
-            expect(content).toContain('View trace');
-            expect(content).toContain('/explore');
+            expect(content).toContain('datasourceUid: jaeger');
         });
 
         it('K8s Jaeger datasource should have nodeGraph enabled', () => {

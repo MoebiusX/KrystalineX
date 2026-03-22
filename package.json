@@ -113,7 +113,9 @@
     "lucide-react": "^0.453.0",
     "mailgun.js": "^12.7.1",
     "memorystore": "^1.6.7",
+    "nanoid": "^5.1.7",
     "next-themes": "^0.4.6",
+    "node-fetch": "^3.3.2",
     "otpauth": "^9.4.1",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
@@ -188,6 +190,9 @@
   "overrides": {
     "fast-xml-parser": "^5.3.4",
     "elliptic": "^6.6.1",
-    "lodash-es": "^4.17.21"
+    "lodash-es": "^4.17.21",
+    "underscore": ">=1.13.8",
+    "minimatch": ">=10.0.0",
+    "basic-ftp": ">=5.1.1"
   }
 }
