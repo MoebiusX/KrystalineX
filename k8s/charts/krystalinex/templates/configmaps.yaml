@@ -127,6 +127,15 @@ data:
           - targets: ['{{ include "krystalinex.fullname" . }}-redis-exporter:9121']
         scrape_interval: 15s
 
+      # Kong API Gateway (Prometheus plugin metrics)
+      {{- if .Values.kong.enabled }}
+      - job_name: 'kong'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-kong:8100']
+        metrics_path: /metrics
+        scrape_interval: 15s
+      {{- end }}
+
   alerting-rules.yml: |
     # KrystalineX Prometheus Alerting Rules
     groups:

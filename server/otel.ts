@@ -1,3 +1,9 @@
+// Register ESM loader hooks so import-in-the-middle can intercept
+// built-in modules (http, etc.) for proper context propagation.
+// Must run before the main module's imports are resolved.
+import { register } from 'node:module';
+register('import-in-the-middle/hook.mjs', import.meta.url);
+
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
