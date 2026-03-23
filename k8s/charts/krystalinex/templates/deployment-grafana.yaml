@@ -65,6 +65,9 @@ spec:
             - name: k8s-dashboard-json
               mountPath: /etc/grafana/provisioning/dashboards/k8s-cluster.json
               subPath: k8s-cluster.json
+            - name: predictive-finops-dashboard-json
+              mountPath: /etc/grafana/provisioning/dashboards/predictive-finops.json
+              subPath: predictive-finops.json
           {{- if .Values.grafana.persistence.enabled }}
             - name: grafana-data
               mountPath: /var/lib/grafana
@@ -105,6 +108,12 @@ spec:
             items:
               - key: k8s-cluster.json
                 path: k8s-cluster.json
+        - name: predictive-finops-dashboard-json
+          configMap:
+            name: {{ include "krystalinex.fullname" . }}-grafana-dashboards
+            items:
+              - key: predictive-finops.json
+                path: predictive-finops.json
       {{- if .Values.grafana.persistence.enabled }}
         - name: grafana-data
           persistentVolumeClaim:
