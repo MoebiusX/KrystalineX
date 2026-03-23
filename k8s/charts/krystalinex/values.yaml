@@ -258,7 +258,7 @@ prometheus:
       memory: 256Mi
 
 loki:
-  enabled: false
+  enabled: true
   image:
     repository: grafana/loki
     tag: "3.0.0"
