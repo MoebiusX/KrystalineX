@@ -23,4 +23,6 @@ data:
 {{ .Files.Get "dashboards/unified-observability.json" | indent 4 }}
   k8s-cluster.json: |
 {{ .Files.Get "dashboards/k8s-cluster.json" | indent 4 }}
+  predictive-finops.json: |
+{{ .Files.Get "dashboards/predictive-finops.json" | indent 4 }}
 {{- end }}
