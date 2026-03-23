@@ -277,7 +277,7 @@ loki:
       memory: 256Mi
 
 promtail:
-  enabled: false
+  enabled: true
   image:
     repository: grafana/promtail
     tag: "3.0.0"
