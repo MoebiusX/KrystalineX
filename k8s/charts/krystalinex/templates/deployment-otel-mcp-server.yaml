@@ -27,14 +27,17 @@ spec:
               containerPort: 3001
           env:
             # Backend URLs — resolved via in-cluster service DNS
+            # Include base paths matching each service's --web.external-url / QUERY_BASE_PATH
             - name: JAEGER_URL
-              value: "http://{{ include "krystalinex.fullname" . }}-jaeger:16686"
+              value: "http://{{ include "krystalinex.fullname" . }}-jaeger:16686/jaeger"
             - name: PROMETHEUS_URL
               value: "http://{{ include "krystalinex.fullname" . }}-prometheus:9090"
+            - name: PROMETHEUS_PATH_PREFIX
+              value: "/prometheus"
             - name: LOKI_URL
               value: "http://{{ include "krystalinex.fullname" . }}-loki:3100"
             - name: ALERTMANAGER_URL
-              value: "http://{{ include "krystalinex.fullname" . }}-alertmanager:9093"
+              value: "http://{{ include "krystalinex.fullname" . }}-alertmanager:9093/alertmanager"
             - name: APP_API_URL
               value: "http://{{ include "krystalinex.fullname" . }}-server:5000"
             # Client auth keys from secret
