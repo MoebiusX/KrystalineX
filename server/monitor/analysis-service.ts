@@ -13,6 +13,7 @@ import type {
 } from './types';
 import { historyStore } from './history-store';
 import { metricsCorrelator, type CorrelatedMetrics } from './metrics-correlator';
+import { enrichFromTrace, buildRCAPrompt, type TraceContext } from './context-enricher';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
 
@@ -80,20 +81,47 @@ export class AnalysisService {
         }
 
         try {
-            // Fetch correlated metrics for context
-            let correlatedMetrics: CorrelatedMetrics | null = null;
+            // Gather full RCA context from the traceId
+            let traceCtx: TraceContext | null = null;
             try {
-                correlatedMetrics = await metricsCorrelator.correlate(
-                    anomaly.id,
-                    anomaly.service,
-                    new Date(anomaly.timestamp)
-                );
-                logger.debug({ hasMetrics: !!correlatedMetrics }, 'Metrics correlation result');
-            } catch (metricsError: any) {
-                logger.warn({ err: metricsError }, 'Metrics unavailable for analysis');
+                traceCtx = await enrichFromTrace(anomaly.traceId, {
+                    existingTrace: fullTrace,
+                    hint: {
+                        id: anomaly.id,
+                        deviation: anomaly.deviation,
+                        severity: anomaly.severity,
+                        expectedMeanMs: anomaly.expectedMean,
+                        expectedStdDevMs: anomaly.expectedStdDev,
+                    },
+                });
+                logger.info({
+                    traceId: anomaly.traceId,
+                    spans: traceCtx.trace?.totalSpans ?? 0,
+                    services: traceCtx.trace?.services?.length ?? 0,
+                    logs: traceCtx.logs.count,
+                    firingAlerts: traceCtx.alerts.firing.length,
+                    blastRadius: traceCtx.topology.blastRadius.length,
+                    hasZK: !!traceCtx.zkHealth,
+                }, 'RCA context enriched from traceId');
+            } catch (enrichError: any) {
+                logger.warn({ err: enrichError }, 'Context enrichment failed, falling back to basic metrics');
             }
 
-            const analysis = await this.callOllama(anomaly, fullTrace, correlatedMetrics);
+            // Fall back to basic metrics if enrichment failed
+            let correlatedMetrics: CorrelatedMetrics | null = null;
+            if (!traceCtx) {
+                try {
+                    correlatedMetrics = await metricsCorrelator.correlate(
+                        anomaly.id,
+                        anomaly.service,
+                        new Date(anomaly.timestamp)
+                    );
+                } catch (metricsError: any) {
+                    logger.warn({ err: metricsError }, 'Metrics unavailable for analysis');
+                }
+            }
+
+            const analysis = await this.callOllama(anomaly, fullTrace, correlatedMetrics, traceCtx);
 
             // Cache the result
             historyStore.addAnalysis(analysis);
@@ -111,9 +139,13 @@ export class AnalysisService {
     private async callOllama(
         anomaly: Anomaly,
         fullTrace?: JaegerTrace,
-        metrics?: CorrelatedMetrics | null
+        metrics?: CorrelatedMetrics | null,
+        traceCtx?: TraceContext | null
     ): Promise<AnalysisResponse> {
-        const prompt = this.buildPrompt(anomaly, fullTrace, metrics);
+        // Use enriched prompt if trace context is available, otherwise fall back
+        const prompt = traceCtx
+            ? buildRCAPrompt(traceCtx)
+            : this.buildPrompt(anomaly, fullTrace, metrics);
 
         // 300s timeout — F16 model on CPU takes ~4-5 minutes per generation
         const controller = new AbortController();

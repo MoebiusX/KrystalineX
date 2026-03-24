@@ -31,11 +31,11 @@ const MIN_SAMPLES_FOR_THRESHOLD = 10;
 
 // Default thresholds when not enough data
 const DEFAULT_THRESHOLDS: AdaptiveThresholds = {
-    sev5: 1.3,   // ~80th percentile of normal distribution
-    sev4: 1.65,  // ~90th percentile
-    sev3: 2.0,   // ~95th percentile
-    sev2: 2.6,   // ~99th percentile
-    sev1: 3.3,   // ~99.9th percentile
+    sev5: 2.0,   // ~80th percentile of normal distribution
+    sev4: 3.0,  // ~90th percentile
+    sev3: 4.0,   // ~95th percentile
+    sev2: 5.0,   // ~99th percentile
+    sev1: 6.0,   // ~99.9th percentile
 };
 
 interface SpanData {

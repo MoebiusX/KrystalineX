@@ -136,6 +136,40 @@ data:
         scrape_interval: 15s
       {{- end }}
 
+      # Alertmanager internal metrics
+      - job_name: 'alertmanager'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-alertmanager:9093']
+        metrics_path: /alertmanager/metrics
+        scrape_interval: 15s
+
+      # Loki (log aggregation) internal metrics
+      - job_name: 'loki'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-loki:3100']
+        metrics_path: /metrics
+        scrape_interval: 15s
+
+      # Promtail (log shipper - DaemonSet, uses DNS SD for all instances)
+      {{- if .Values.promtail.enabled }}
+      - job_name: 'promtail'
+        dns_sd_configs:
+          - names:
+              - '{{ include "krystalinex.fullname" . }}-promtail.{{ .Release.Namespace }}.svc.cluster.local'
+            type: A
+            port: 9080
+        scrape_interval: 15s
+      {{- end }}
+
+      # OTEL MCP Server (self-metrics)
+      {{- if .Values.otelMcpServer.enabled }}
+      - job_name: 'otel-mcp-server'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-otel-mcp-server:3001']
+        metrics_path: /metrics
+        scrape_interval: 30s
+      {{- end }}
+
   alerting-rules.yml: |
     # KrystalineX Prometheus Alerting Rules
     groups:
@@ -726,6 +760,99 @@ data:
               summary: "Deployment replica mismatch"
               description: "A deployment does not have the desired number of ready replicas."
 
+      # ============================================
+      # PREDICTIVE / FORECASTING ALERTS (Cap 7)
+      # ============================================
+      - name: krystalinex.predictive
+        rules:
+          - alert: ErrorBudgetExhaustionForecast
+            expr: |
+              predict_linear(slo:availability:error_budget_remaining[6h], 3600 * 24) < 0
+            for: 15m
+            labels:
+              severity: warning
+              team: platform
+              category: predictive
+            annotations:
+              summary: "Availability error budget predicted to exhaust within 24h"
+              description: "At the current burn rate, availability error budget will be depleted in less than 24 hours."
+
+          - alert: LatencyBudgetExhaustionForecast
+            expr: |
+              predict_linear(slo:latency:error_budget_remaining[6h], 3600 * 24) < 0
+            for: 15m
+            labels:
+              severity: warning
+              team: platform
+              category: predictive
+            annotations:
+              summary: "Latency error budget predicted to exhaust within 24h"
+              description: "At the current trend, latency SLO error budget will be depleted in less than 24 hours."
+
+          - alert: DiskExhaustionForecast
+            expr: |
+              predict_linear(node_filesystem_avail_bytes{mountpoint="/"}[6h], 3600 * 24 * 7) < 0
+            for: 30m
+            labels:
+              severity: warning
+              team: infra
+              category: predictive
+            annotations:
+              summary: "Disk space predicted to exhaust within 7 days"
+              description: "Node {{ "{{" }} $labels.instance {{ "}}" }} disk will fill within 7 days at current usage rate."
+
+          - alert: MemoryExhaustionForecast
+            expr: |
+              predict_linear(
+                node_memory_MemAvailable_bytes[6h], 3600 * 4
+              ) < 0
+            for: 15m
+            labels:
+              severity: critical
+              team: infra
+              category: predictive
+            annotations:
+              summary: "Memory predicted to exhaust within 4 hours"
+              description: "Node {{ "{{" }} $labels.instance {{ "}}" }} will run out of memory within 4 hours at current consumption rate."
+
+          - alert: LatencyDegradationTrend
+            expr: |
+              (
+                predict_linear(slo:http_request_duration:p99_1h[3h], 3600)
+                > 2
+              )
+              and
+              (
+                slo:http_request_duration:p99_1h < 2
+              )
+            for: 15m
+            labels:
+              severity: warning
+              team: platform
+              category: predictive
+            annotations:
+              summary: "P99 latency trending toward SLO breach"
+              description: "P99 latency is currently acceptable but predicted to exceed 2s within 1 hour."
+
+          - alert: ErrorRateTrendUp
+            expr: |
+              (
+                predict_linear(slo:http_requests:error_ratio_1h[3h], 3600)
+                > 0.05
+              )
+              and
+              (
+                slo:http_requests:error_ratio_1h < 0.05
+              )
+            for: 10m
+            labels:
+              severity: warning
+              team: platform
+              category: predictive
+            annotations:
+              summary: "Error rate trending toward 5% threshold"
+              description: "Error rate is currently below threshold but predicted to exceed 5% within 1 hour."
+
   recording-rules.yml: |
     groups:
       - name: slo:error_rates
@@ -829,6 +956,88 @@ data:
                 (1 - slo:http_request_duration:ratio_below_500ms_1d)
                 / (1 - 0.95)
               )
+
+      # ============================================
+      # FINOPS / COST ATTRIBUTION (Cap 15)
+      # ============================================
+      - name: finops:ingestion
+        interval: 1m
+        rules:
+          # Per-service request rate (proxy for cost)
+          - record: finops:requests:rate_per_service_5m
+            expr: |
+              sum(rate(http_requests_total[5m])) by (job)
+
+          # Per-service error overhead cost
+          - record: finops:errors:rate_per_service_5m
+            expr: |
+              sum(rate(http_request_errors_total[5m])) by (job)
+
+          # OTEL spans exported per service (from collector metrics)
+          - record: finops:spans:exported_rate_5m
+            expr: |
+              sum(rate(otelcol_exporter_sent_spans_total[5m]))
+
+          # OTEL spans dropped (sampling savings)
+          - record: finops:spans:dropped_rate_5m
+            expr: |
+              sum(rate(otelcol_processor_dropped_spans_total[5m]))
+
+          # Sampling efficiency ratio (% of spans kept)
+          - record: finops:spans:sampling_ratio
+            expr: |
+              (
+                sum(rate(otelcol_exporter_sent_spans_total[5m]))
+                / (
+                  sum(rate(otelcol_exporter_sent_spans_total[5m]))
+                  + sum(rate(otelcol_processor_dropped_spans_total[5m]))
+                )
+              ) or vector(1)
+
+          # Log bytes ingested per service (Loki/Promtail)
+          - record: finops:logs:bytes_rate_per_component_5m
+            expr: |
+              sum(rate(promtail_read_bytes_total[5m])) by (filename)
+
+          # Per-service storage cost estimate (normalized units)
+          # 1 unit = $0.10/GB/month at list cloud pricing
+          - record: finops:cost:request_units_per_service_1h
+            expr: |
+              (
+                sum(increase(http_requests_total[1h])) by (job)
+                * 0.000001
+              )
+
+          # Total platform telemetry cost index
+          - record: finops:cost:telemetry_index_1h
+            expr: |
+              (
+                sum(increase(http_requests_total[1h])) * 0.000001
+              )
+              +
+              (
+                sum(rate(otelcol_exporter_sent_spans_total[5m])) * 3600 * 0.00001
+              )
+
+      - name: finops:capacity
+        interval: 5m
+        rules:
+          # CPU cost per service (core-seconds per hour)
+          - record: finops:cpu:usage_per_pod_5m
+            expr: |
+              sum(rate(container_cpu_usage_seconds_total{namespace="krystalinex", container!=""}[5m])) by (pod) * 3600
+
+          # Memory cost per service (GB-hours)
+          - record: finops:memory:usage_per_pod_gb_hours
+            expr: |
+              sum(container_memory_working_set_bytes{namespace="krystalinex", container!=""}) by (pod) / 1073741824
+
+          # Kong gateway overhead (latency added by Kong)
+          - record: finops:kong:overhead_seconds
+            expr: |
+              histogram_quantile(0.99,
+                sum(rate(kong_kong_latency_ms_bucket[5m])) by (le)
+              ) / 1000
 {{- end }}
 ---
 {{- if .Values.otelCollector.enabled }}
@@ -856,6 +1065,31 @@ data:
               max_age: 7200
 
     processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 512
+        spike_limit_mib: 128
+      tail_sampling:
+        decision_wait: 10s
+        num_traces: 50000
+        policies:
+          - name: always-sample-errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: always-sample-slow
+            type: latency
+            latency:
+              threshold_ms: 500
+          - name: always-sample-payments
+            type: string_attribute
+            string_attribute:
+              key: rpc.service
+              values: [kx-matcher, payment-processor]
+          - name: probabilistic-normal
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 10
       batch:
         timeout: 1s
         send_batch_size: 1024
@@ -878,6 +1112,6 @@ data:
       pipelines:
         traces:
           receivers: [otlp]
-          processors: [batch]
+          processors: [memory_limiter, tail_sampling, batch]
           exporters: [otlp]
 {{- end }}

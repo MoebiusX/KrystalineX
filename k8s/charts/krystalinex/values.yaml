@@ -355,6 +355,27 @@ ollama:
       cpu: 500m
       memory: 4Gi
 
+otelMcpServer:
+  enabled: true
+  image:
+    repository: moebiusx/otel-mcp-server
+    tag: v1.2.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3001
+  timeoutMs: "15000"
+  auth:
+    agentKey: "sk-kx-copilot-mcp-2026"
+    rcaKey: "sk-kx-rca-agent-2026"
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
 maildev:
   enabled: true  # Dev SMTP server
   image:
