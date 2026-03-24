@@ -136,6 +136,40 @@ data:
         scrape_interval: 15s
       {{- end }}
 
+      # Alertmanager internal metrics
+      - job_name: 'alertmanager'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-alertmanager:9093']
+        metrics_path: /alertmanager/metrics
+        scrape_interval: 15s
+
+      # Loki (log aggregation) internal metrics
+      - job_name: 'loki'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-loki:3100']
+        metrics_path: /metrics
+        scrape_interval: 15s
+
+      # Promtail (log shipper - DaemonSet, uses DNS SD for all instances)
+      {{- if .Values.promtail.enabled }}
+      - job_name: 'promtail'
+        dns_sd_configs:
+          - names:
+              - '{{ include "krystalinex.fullname" . }}-promtail.{{ .Release.Namespace }}.svc.cluster.local'
+            type: A
+            port: 9080
+        scrape_interval: 15s
+      {{- end }}
+
+      # OTEL MCP Server (self-metrics)
+      {{- if .Values.otelMcpServer.enabled }}
+      - job_name: 'otel-mcp-server'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-otel-mcp-server:3001']
+        metrics_path: /metrics
+        scrape_interval: 30s
+      {{- end }}
+
   alerting-rules.yml: |
     # KrystalineX Prometheus Alerting Rules
     groups:
