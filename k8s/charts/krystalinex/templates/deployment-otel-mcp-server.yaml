@@ -1,0 +1,112 @@
+{{- if .Values.otelMcpServer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-otel-mcp-server
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-mcp-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "krystalinex.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: otel-mcp-server
+  template:
+    metadata:
+      labels:
+        {{- include "krystalinex.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: otel-mcp-server
+    spec:
+      containers:
+        - name: otel-mcp-server
+          image: "{{ .Values.otelMcpServer.image.repository }}:{{ .Values.otelMcpServer.image.tag }}"
+          imagePullPolicy: {{ .Values.otelMcpServer.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3001
+          env:
+            # Backend URLs — resolved via in-cluster service DNS
+            - name: JAEGER_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-jaeger:16686"
+            - name: PROMETHEUS_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-prometheus:9090"
+            - name: LOKI_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-loki:3100"
+            - name: ALERTMANAGER_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-alertmanager:9093"
+            - name: APP_API_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-server:5000"
+            # Client auth keys from secret
+            - name: MCP_AUTH_KEYS_FILE
+              value: "/etc/otel-mcp/auth-keys.json"
+            - name: MCP_TIMEOUT_MS
+              value: "{{ .Values.otelMcpServer.timeoutMs }}"
+          volumeMounts:
+            - name: auth-keys
+              mountPath: /etc/otel-mcp
+              readOnly: true
+          resources:
+            {{- toYaml .Values.otelMcpServer.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+      volumes:
+        - name: auth-keys
+          secret:
+            secretName: {{ include "krystalinex.fullname" . }}-mcp-auth
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-otel-mcp-server
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-mcp-server
+spec:
+  type: {{ .Values.otelMcpServer.service.type }}
+  ports:
+    - port: {{ .Values.otelMcpServer.service.port }}
+      targetPort: http
+      name: http
+  selector:
+    {{- include "krystalinex.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-mcp-server
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-mcp-auth
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: otel-mcp-server
+type: Opaque
+stringData:
+  auth-keys.json: |
+    {
+      "keys": [
+        {
+          "id": "copilot-agent",
+          "key": "{{ .Values.otelMcpServer.auth.agentKey }}",
+          "description": "GitHub Copilot / Claude Desktop agent"
+        },
+        {
+          "id": "rca-agent",
+          "key": "{{ .Values.otelMcpServer.auth.rcaKey }}",
+          "description": "RCA analysis agent"
+        }
+      ]
+    }
+{{- end }}
