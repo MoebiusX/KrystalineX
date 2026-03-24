@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "node scripts/start-dev.js",
     "dev:compose": "docker-compose up --build kx-exchange payment-processor vite",
-    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/mcp/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist/mcp",
     "start": "cross-env NODE_ENV=production node dist/index.js",
+    "mcp": "node dist/mcp/index.js",
+    "mcp:http": "node dist/mcp/index.js --http 3100",
+    "mcp:dev": "tsx server/mcp/index.ts",
     "check": "tsc",
     "dev:server": "cross-env NODE_ENV=development tsx server/index.ts",
     "db:push": "drizzle-kit push",
@@ -43,6 +46,7 @@
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.60.1",
     "@opentelemetry/context-zone": "^2.4.0",
