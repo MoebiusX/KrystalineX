@@ -147,6 +147,22 @@ const sdk = new NodeSDK({
     // Enable HTTP instrumentation for Kong proxy spans
     '@opentelemetry/instrumentation-http': {
       enabled: true,
+      ignoreOutgoingRequestHook: (request) => {
+        // Exclude internal monitoring traffic to prevent self-referential
+        // anomaly detection loops (detector polls Jaeger → creates span →
+        // Jaeger stores span → detector flags its own slow poll as anomaly)
+        const path = request.path || '';
+        const host = (request.hostname || request.host || '') + ':' + (request.port || '');
+        if (/\/api\/traces|\/api\/services|\/v1\/traces|jaeger/.test(path)) return true;
+        if (/:16686|:4318|:4317/.test(host)) return true;
+        if (/\/metrics/.test(path) || /:9090/.test(host)) return true;
+        return false;
+      },
+    },
+    // Suppress undici instrumentation — it duplicates HTTP client spans
+    // and creates unfiltered monitoring-loop spans via fetch()
+    '@opentelemetry/instrumentation-undici': {
+      enabled: false,
     },
   })],
 });
