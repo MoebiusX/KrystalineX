@@ -71,12 +71,12 @@ data:
     receivers:
       - name: 'goalert-webhook'
         webhook_configs:
-          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/prometheusalertmanager/incoming?token=7f9c87ea-d16e-41fb-aa5b-5665c2ad9c4d'
+          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/prometheusalertmanager/incoming?token=57dff51f-34a8-44c6-be4b-212e7a09250b'
             send_resolved: true
 
       - name: 'goalert-critical'
         webhook_configs:
-          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/prometheusalertmanager/incoming?token=7f9c87ea-d16e-41fb-aa5b-5665c2ad9c4d'
+          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/prometheusalertmanager/incoming?token=57dff51f-34a8-44c6-be4b-212e7a09250b'
             send_resolved: true
         email_configs:
           - to: 'carlos@krystaline.io'
