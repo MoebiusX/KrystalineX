@@ -8,6 +8,8 @@ metadata:
     app.kubernetes.io/component: jaeger
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "krystalinex.selectorLabels" . | nindent 6 }}
@@ -35,8 +37,19 @@ spec:
               value: "true"
             - name: QUERY_BASE_PATH
               value: "/jaeger"
-            - name: MEMORY_MAX_TRACES
-              value: "200000"
+            - name: SPAN_STORAGE_TYPE
+              value: "badger"
+            - name: BADGER_EPHEMERAL
+              value: "false"
+            - name: BADGER_DIRECTORY_VALUE
+              value: "{{ .Values.jaeger.storage.badger.directory }}/data"
+            - name: BADGER_DIRECTORY_KEY
+              value: "{{ .Values.jaeger.storage.badger.directory }}/key"
+            - name: BADGER_MAINTENANCE_INTERVAL
+              value: "{{ .Values.jaeger.storage.badger.maintenanceInterval }}"
+          volumeMounts:
+            - name: badger-data
+              mountPath: {{ .Values.jaeger.storage.badger.directory }}
           livenessProbe:
             httpGet:
               path: /
@@ -51,6 +64,14 @@ spec:
             periodSeconds: 5
           resources:
             {{- toYaml .Values.jaeger.resources | nindent 12 }}
+      volumes:
+        - name: badger-data
+          {{- if .Values.jaeger.storage.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "krystalinex.fullname" . }}-jaeger-badger
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
 ---
 apiVersion: v1
 kind: Service
