@@ -205,6 +205,16 @@ jaeger:
   image:
     repository: jaegertracing/all-in-one
     tag: latest
+  storage:
+    type: badger
+    badger:
+      ephemeral: false
+      directory: /badger
+      maintenanceInterval: "5m"
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
   service:
     type: ClusterIP
     ports:
