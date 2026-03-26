@@ -257,8 +257,11 @@ async function main() {
                     }
                     console.log(`[MATCHER] Response with POST context: ${originalContext.traceparent?.slice(0, 40) || 'none'}...`);
 
+                    // Reply to the caller's exclusive queue if set, otherwise use shared queue
+                    const replyTo = msg.properties.replyTo || RESPONSE_QUEUE;
+
                     channel.sendToQueue(
-                        RESPONSE_QUEUE,
+                        replyTo,
                         Buffer.from(JSON.stringify(response)),
                         {
                             persistent: true,
