@@ -16,7 +16,7 @@ secrets:
 
 server:
   enabled: true
-  replicaCount: 1
+  replicaCount: 3
   image:
     repository: moebiusx/krystalinex-server
     tag: v2.6.4
@@ -89,7 +89,7 @@ paymentProcessor:
 
 frontend:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: moebiusx/krystalinex-frontend
     tag: v2.1.25
