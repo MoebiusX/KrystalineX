@@ -209,7 +209,9 @@ async function main() {
                     });
 
                     // Simulate order matching (validation, price lookup, execution)
-                    await simulateProcessing(80);
+                    // Random 150-800ms to model real order book matching + risk checks
+                    const matchingDelay = 150 + Math.floor(Math.random() * 650);
+                    await simulateProcessing(matchingDelay);
 
                     // Calculate execution
                     const { fillPrice, slippage } = simulateExecution(currentPrice, side);
