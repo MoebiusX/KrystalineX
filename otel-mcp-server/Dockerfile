@@ -1,4 +1,4 @@
-FROM node:22-slim AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --ignore-scripts
@@ -6,7 +6,7 @@ COPY tsconfig.json ./
 COPY src/ src/
 RUN npm run build
 
-FROM node:22-slim
+FROM node:22-alpine
 LABEL org.opencontainers.image.source="https://github.com/KrystalineX/otel-mcp-server"
 LABEL org.opencontainers.image.description="OpenTelemetry MCP Server"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
