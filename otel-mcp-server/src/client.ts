@@ -17,6 +17,56 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { writeFileSync } from 'fs';
+
+// ── Output capture (for --output flag) ──────────────────
+
+let outputBuffer: string[] | null = null;
+
+const originalLog = console.log.bind(console);
+const originalError = console.error.bind(console);
+
+/** Emoji → plain-text map for clean file output */
+const EMOJI_MAP: Record<string, string> = {
+  '✅': '[OK]', '❌': '[FAIL]', '🟢': '[UP]', '🔴': '[DOWN]',
+  '🟡': '[WARN]', '🔥': '[FIRE]', '⚠': '[!]', '⚠️': '[!]',
+  '📊': '[REPORT]', '🏥': '[HEALTH]', '🎯': '[TARGET]',
+  '📡': '[TOPO]', '📈': '[METRIC]', '🔍': '[TRACE]',
+  '🚨': '[ALERT]', '💡': '[INFO]', '🛠': '[TOOL]', '🛠️': '[TOOL]',
+  '📋': '[LIST]', '█': '#',
+};
+
+function stripEmoji(text: string): string {
+  let s = text;
+  for (const [emoji, plain] of Object.entries(EMOJI_MAP)) {
+    s = s.split(emoji).join(plain);
+  }
+  return s;
+}
+
+function enableOutputCapture(): void {
+  outputBuffer = [];
+  console.log = (...args: unknown[]) => {
+    const line = args.map(a => typeof a === 'string' ? a : String(a)).join(' ');
+    outputBuffer!.push(line);
+    originalLog(...args);
+  };
+  console.error = (...args: unknown[]) => {
+    const line = args.map(a => typeof a === 'string' ? a : String(a)).join(' ');
+    outputBuffer!.push(line);
+    originalError(...args);
+  };
+}
+
+function flushToFile(filePath: string): void {
+  if (!outputBuffer) return;
+  const content = stripEmoji(outputBuffer.join('\n')) + '\n';
+  writeFileSync(filePath, content, 'utf-8');
+  // Restore original console so the confirmation message is clean
+  console.log = originalLog;
+  console.error = originalError;
+  console.log(`\nReport saved to: ${filePath}`);
+}
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -459,6 +509,9 @@ async function main(): Promise<void> {
 
   const url = flags['url'] || env('MCP_URL', 'http://localhost:3001/mcp');
   const apiKey = flags['key'] || env('MCP_API_KEY', '');
+  const outputFile = flags['output'];
+
+  if (outputFile) enableOutputCapture();
 
   if (command === 'help' || command === '--help' || command === '-h') {
     console.log(`
@@ -476,9 +529,11 @@ Options:
   --url <url>     MCP server URL  (env: MCP_URL, default: http://localhost:3001/mcp)
   --key <key>     API key         (env: MCP_API_KEY)
   --range <dur>   Time range: 15m, 1h, 6h, 1d, 7d  (default: 1h)
+  --output <file> Save output to file (clean plain-text, no emoji)
 
 Examples:
   otel-mcp-client report --range 1d
+  otel-mcp-client report --range 1d --output cluster-report.txt
   otel-mcp-client targets --url http://mcp.internal:3001/mcp
   otel-mcp-client query metrics_query '{"query":"up"}'
   MCP_API_KEY=sk-xxx otel-mcp-client health
@@ -526,6 +581,7 @@ Examples:
     process.exit(1);
   } finally {
     await cli.close();
+    if (outputFile) flushToFile(outputFile);
   }
 }
 
