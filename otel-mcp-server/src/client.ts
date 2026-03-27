@@ -162,18 +162,27 @@ async function cmdTools(cli: McpCli): Promise<void> {
 
 async function cmdHealth(cli: McpCli): Promise<void> {
   heading('System Health');
-  const health = await cli.callTool('system_health') as {
-    status: string;
-    services: Array<{ name: string; status: string; avgDuration: number; spanCount: number; activeAnomalies: number; lastSeen: string }>;
-    lastPolled: string;
+  const raw = await cli.callTool('system_health');
+
+  // Handle error responses
+  if (typeof raw === 'string') {
+    console.log(`  ${raw}`);
+    return;
+  }
+
+  const health = raw as {
+    status?: string;
+    services?: Array<{ name: string; status: string; avgDuration: number; spanCount: number; activeAnomalies: number; lastSeen: string }>;
+    lastPolled?: string;
   };
 
-  const icon = health.status === 'healthy' ? '✅' : '❌';
-  console.log(`  Status: ${icon} ${health.status.toUpperCase()}`);
-  console.log(`  Polled: ${health.lastPolled}`);
+  const status = health.status ?? 'unknown';
+  const icon = status === 'healthy' ? '✅' : '❌';
+  console.log(`  Status: ${icon} ${status.toUpperCase()}`);
+  if (health.lastPolled) console.log(`  Polled: ${health.lastPolled}`);
   console.log();
 
-  if (health.services) {
+  if (health.services?.length) {
     const maxName = Math.max(...health.services.map(s => s.name.length));
     for (const svc of health.services) {
       const sIcon = svc.status === 'healthy' ? '✅' : '❌';
@@ -184,22 +193,32 @@ async function cmdHealth(cli: McpCli): Promise<void> {
 
 async function cmdTargets(cli: McpCli): Promise<void> {
   heading('Prometheus Targets');
-  const data = await cli.callTool('metrics_targets') as {
-    activeTargets: number;
-    targets: Array<{ job: string; instance: string; health: string; lastScrape: string; lastError: string | null }>;
+  const raw = await cli.callTool('metrics_targets');
+
+  if (typeof raw === 'string') {
+    console.log(`  ${raw}`);
+    return;
+  }
+
+  const data = raw as {
+    activeTargets?: number;
+    targets?: Array<{ job: string; instance: string; health: string; lastScrape: string; lastError: string | null }>;
   };
 
-  const up = data.targets.filter(t => t.health === 'up').length;
-  const down = data.targets.filter(t => t.health !== 'up').length;
-  console.log(`  Total: ${data.activeTargets}  |  🟢 Up: ${up}  |  🔴 Down: ${down}`);
+  const targets = data.targets ?? [];
+  const up = targets.filter(t => t.health === 'up').length;
+  const down = targets.filter(t => t.health !== 'up').length;
+  console.log(`  Total: ${data.activeTargets ?? targets.length}  |  🟢 Up: ${up}  |  🔴 Down: ${down}`);
   console.log();
 
-  const maxJob = Math.max(...data.targets.map(t => t.job.length));
-  const maxInst = Math.max(...data.targets.map(t => t.instance.length));
-  for (const t of data.targets) {
-    const icon = t.health === 'up' ? '🟢' : '🔴';
-    const err = t.lastError ? `  ⚠ ${t.lastError}` : '';
-    console.log(`  ${icon} ${t.job.padEnd(maxJob + 2)}${t.instance.padEnd(maxInst + 2)}${err}`);
+  if (targets.length) {
+    const maxJob = Math.max(...targets.map(t => t.job.length));
+    const maxInst = Math.max(...targets.map(t => t.instance.length));
+    for (const t of targets) {
+      const icon = t.health === 'up' ? '🟢' : '🔴';
+      const err = t.lastError ? `  ⚠ ${t.lastError}` : '';
+      console.log(`  ${icon} ${t.job.padEnd(maxJob + 2)}${t.instance.padEnd(maxInst + 2)}${err}`);
+    }
   }
 }
 
@@ -209,13 +228,16 @@ async function cmdTraces(cli: McpCli, flags: Record<string, string>): Promise<vo
   const limit = parseInt(flags['limit'] || '20', 10);
 
   heading(`Recent Traces — ${service} (${range})`);
-  const data = await cli.callTool('traces_search', {
-    service,
-    lookback: range,
-    limit,
-  }) as { count: number; traces: Array<{ traceId: string; rootOperation: string; spanCount: number; duration_ms: number; services: string[]; startTime: string; hasErrors: boolean }> };
+  const raw = await cli.callTool('traces_search', { service, lookback: range, limit });
 
-  console.log(`  Found: ${data.count} traces`);
+  if (typeof raw === 'string') {
+    console.log(`  ${raw}`);
+    return;
+  }
+
+  const data = raw as { count?: number; traces?: Array<{ traceId: string; rootOperation: string; spanCount: number; duration_ms: number; services: string[]; startTime: string; hasErrors: boolean }> };
+
+  console.log(`  Found: ${data.count ?? data.traces?.length ?? 0} traces`);
   console.log();
 
   if (data.traces) {

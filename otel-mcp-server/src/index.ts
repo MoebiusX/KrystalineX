@@ -122,15 +122,19 @@ async function main(): Promise<void> {
       }
 
       // New session — create a fresh server+transport pair
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid: string) => {
+          sessions.set(sid, { transport });
+        },
+      });
       const sessionServer = createServer(config, options);
       await sessionServer.connect(transport);
 
-      // Store session and clean up on close
-      const sid = transport.sessionId!;
-      sessions.set(sid, { transport });
       transport.onclose = () => {
-        sessions.delete(sid);
+        if (transport.sessionId) {
+          sessions.delete(transport.sessionId);
+        }
       };
 
       await transport.handleRequest(req, res);
