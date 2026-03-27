@@ -1124,7 +1124,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum (container_fs_usage_bytes{origin_prometheus=~\"$origin_prometheus\",device=~\"^/dev/.*$\",id=\"/\",node=~\"^$Node$\"}) / sum (container_fs_limit_bytes{origin_prometheus=~\"$origin_prometheus\",device=~\"^/dev/.*$\",id=\"/\",node=~\"^$Node$\"})",
+          "expr": "sum(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"rootfs\"} - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"rootfs\"}) / sum(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"rootfs\"})",
           "instant": true,
           "interval": "",
           "legendFormat": "Utilization Rate",
@@ -1135,7 +1135,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum (container_fs_usage_bytes{origin_prometheus=~\"$origin_prometheus\",device=~\"^/dev/.*$\",id=\"/\",node=~\"^$Node$\"})",
+          "expr": "sum(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"rootfs\"} - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"rootfs\"})",
           "instant": true,
           "interval": "",
           "legendFormat": "Usage",
@@ -1146,7 +1146,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum (container_fs_limit_bytes{origin_prometheus=~\"$origin_prometheus\",device=~\"^/dev/.*$\",id=\"/\",node=~\"^$Node$\"})",
+          "expr": "sum(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"rootfs\"})",
           "instant": true,
           "interval": "",
           "legendFormat": "Total",
@@ -2450,7 +2450,7 @@
             "uid": "prometheus"
           },
           "exemplar": false,
-          "expr": "sum (container_fs_usage_bytes{origin_prometheus=~\"$origin_prometheus\",device=~\"^/dev/.*$\",id=\"/\",node=~\"^$Node$\"}) by (node)",
+          "expr": "sum(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"rootfs\"} - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"rootfs\"}) by (instance)",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -2463,7 +2463,7 @@
             "uid": "prometheus"
           },
           "exemplar": false,
-          "expr": "sum (container_fs_limit_bytes{origin_prometheus=~\"$origin_prometheus\",device=~\"^/dev/.*$\",id=\"/\",node=~\"^$Node$\"}) by (node)",
+          "expr": "sum(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"rootfs\"}) by (instance)",
           "format": "table",
           "instant": true,
           "interval": "",
@@ -2554,7 +2554,7 @@
             "uid": "prometheus"
           },
           "exemplar": false,
-          "expr": "sum (container_fs_usage_bytes{origin_prometheus=~\"$origin_prometheus\",device=~\"^/dev/.*$\",id=\"/\",node=~\"^$Node$\"})by (node) / sum (container_fs_limit_bytes{origin_prometheus=~\"$origin_prometheus\",device=~\"^/dev/.*$\",id=\"/\",node=~\"^$Node$\"})by (node)",
+          "expr": "sum(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"rootfs\"} - node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"rootfs\"}) by (instance) / sum(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"rootfs\"}) by (instance)",
           "format": "table",
           "instant": true,
           "interval": "",
