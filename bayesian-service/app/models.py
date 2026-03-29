@@ -574,3 +574,276 @@ class BayesianInferenceEngine:
 
         confidence = 0.4 * sample_factor + 0.35 * precision_factor + 0.25 * current_factor
         return min(1.0, max(0.1, confidence))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ALERT CORRELATION ENGINE — Noisy-OR Bayesian Network for Alert RCA
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _alert_key(alertname: str, service: str) -> str:
+    """Canonical key for an alert type: 'alertname:service'."""
+    return f"{alertname}:{service}" if service else alertname
+
+
+@dataclass
+class AlertCorrelationState:
+    """Learned co-occurrence and temporal ordering statistics."""
+
+    # How many times alert_key was the root cause of an incident
+    root_cause_counts: dict[str, int] = field(default_factory=dict)
+    # Co-occurrence: (root_cause_key, symptom_key) → count
+    co_occurrence: dict[tuple[str, str], int] = field(default_factory=dict)
+    # Temporal: (earlier_key, later_key) → count of times earlier fired first
+    temporal_order: dict[tuple[str, str], int] = field(default_factory=dict)
+    # Total incidents learned
+    total_incidents: int = 0
+    # All known alert keys
+    known_alerts: set[str] = field(default_factory=set)
+    # Leak probability — chance an alert fires spontaneously (false positive)
+    leak_prob: float = 0.05
+
+
+class AlertCorrelationEngine:
+    """
+    Noisy-OR Bayesian Network for alert storm root cause analysis.
+
+    Given historical incidents (clusters of co-occurring alerts), learns:
+      1. Co-occurrence probabilities: P(symptom_alert | root_cause_alert)
+      2. Temporal ordering: which alert tends to fire first
+      3. Root cause priors: how often each alert type is the root cause
+
+    Inference uses Bayes' rule with Noisy-OR likelihood to rank the most
+    probable root cause given a set of currently-firing alerts.
+    """
+
+    def __init__(self) -> None:
+        self.state = AlertCorrelationState()
+
+    @property
+    def incidents_learned(self) -> int:
+        return self.state.total_incidents
+
+    # ─── Training ────────────────────────────────────────────────────────
+
+    def train(
+        self,
+        incidents: list,
+    ) -> dict:
+        """
+        Learn co-occurrence and temporal patterns from historical incidents.
+
+        For each incident:
+          - If root_cause_alert is labeled, use it directly.
+          - Otherwise, the earliest-firing alert is the presumed root cause.
+        """
+        start = time.monotonic()
+
+        for incident in incidents:
+            alerts = incident.alerts
+            if len(alerts) < 1:
+                continue
+
+            # Sort alerts by firing time
+            sorted_alerts = sorted(alerts, key=lambda a: a.fired_at)
+            alert_keys = [_alert_key(a.alertname, a.service) for a in sorted_alerts]
+
+            # Register all alert keys
+            for k in alert_keys:
+                self.state.known_alerts.add(k)
+
+            # Determine root cause
+            if incident.root_cause_alert and incident.root_cause_alert in alert_keys:
+                rc_key = incident.root_cause_alert
+            else:
+                rc_key = alert_keys[0]  # earliest-firing = presumed root cause
+
+            # Update root cause counts
+            self.state.root_cause_counts[rc_key] = (
+                self.state.root_cause_counts.get(rc_key, 0) + 1
+            )
+
+            # Update co-occurrence: root_cause → each symptom
+            unique_keys = set(alert_keys)
+            for symptom_key in unique_keys:
+                if symptom_key != rc_key:
+                    pair = (rc_key, symptom_key)
+                    self.state.co_occurrence[pair] = (
+                        self.state.co_occurrence.get(pair, 0) + 1
+                    )
+
+            # Update temporal ordering for all pairs
+            for i, key_a in enumerate(alert_keys):
+                for key_b in alert_keys[i + 1:]:
+                    if key_a != key_b:
+                        pair = (key_a, key_b)
+                        self.state.temporal_order[pair] = (
+                            self.state.temporal_order.get(pair, 0) + 1
+                        )
+
+            self.state.total_incidents += 1
+
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logger.info(
+            "Alert correlation trained: %d incidents, %d alert types, %.1fms",
+            self.state.total_incidents,
+            len(self.state.known_alerts),
+            elapsed_ms,
+        )
+
+        return {
+            "incidents_learned": self.state.total_incidents,
+            "unique_alert_types": len(self.state.known_alerts),
+            "co_occurrence_pairs": len(self.state.co_occurrence),
+            "training_time_ms": elapsed_ms,
+        }
+
+    # ─── Inference ───────────────────────────────────────────────────────
+
+    def infer(self, alerts: list) -> list[dict]:
+        """
+        Given a set of currently-firing alerts, rank them by probability
+        of being the root cause.
+
+        Uses Noisy-OR Bayesian model:
+          P(c is root cause | firing alerts A) ∝
+            P_prior(c) × ∏_{a ∈ A, a≠c} P(a fires | c is root cause)
+
+        Where:
+          - P_prior(c): Historical frequency + temporal ordering bonus
+          - P(a | c): Learned co-occurrence probability (Noisy-OR)
+          - Leak probability handles never-seen-together pairs
+        """
+        start = time.monotonic()
+
+        sorted_alerts = sorted(alerts, key=lambda a: a.fired_at)
+        alert_keys = [_alert_key(a.alertname, a.service) for a in sorted_alerts]
+        unique_keys = list(dict.fromkeys(alert_keys))  # preserve order, deduplicate
+
+        # Build alert_key → trace_id mapping (first non-null trace_id wins)
+        key_to_trace_id: dict[str, str | None] = {}
+        for a in sorted_alerts:
+            k = _alert_key(a.alertname, a.service)
+            if k not in key_to_trace_id:
+                key_to_trace_id[k] = getattr(a, "trace_id", None)
+
+        if len(unique_keys) == 1:
+            # Single alert — it's trivially the root cause
+            k = unique_keys[0]
+            parts = k.split(":", 1)
+            return [{
+                "alert_key": k,
+                "alertname": parts[0],
+                "service": parts[1] if len(parts) > 1 else "",
+                "probability": 1.0,
+                "evidence": "Only alert firing",
+                "trace_id": key_to_trace_id.get(k),
+            }]
+
+        # Compute unnormalized log-posterior for each candidate root cause
+        log_scores: dict[str, float] = {}
+
+        for idx, candidate in enumerate(unique_keys):
+            # 1. Prior: historical root cause frequency + temporal bonus
+            rc_count = self.state.root_cause_counts.get(candidate, 0)
+            total = max(self.state.total_incidents, 1)
+            # Laplace-smoothed prior
+            prior = (rc_count + 1) / (total + len(unique_keys))
+
+            # Temporal bonus: if this alert fired first, boost prior
+            temporal_bonus = 1.0
+            if idx == 0:
+                temporal_bonus = 2.0  # first-to-fire gets 2× prior
+            elif idx == 1:
+                temporal_bonus = 1.3  # second gets mild boost
+
+            log_prior = np.log(prior * temporal_bonus)
+
+            # 2. Noisy-OR likelihood: P(each other alert | candidate is root cause)
+            log_likelihood = 0.0
+            for other in unique_keys:
+                if other == candidate:
+                    continue
+
+                pair = (candidate, other)
+                co_count = self.state.co_occurrence.get(pair, 0)
+
+                if rc_count > 0:
+                    # Learned co-occurrence probability
+                    p_symptom = (co_count + 0.5) / (rc_count + 1.0)
+                else:
+                    # Never seen as root cause — use leak probability
+                    p_symptom = self.state.leak_prob
+
+                # Clamp to avoid log(0)
+                p_symptom = max(p_symptom, 0.01)
+                log_likelihood += np.log(p_symptom)
+
+            log_scores[candidate] = float(log_prior + log_likelihood)
+
+        # Normalize to probabilities via log-sum-exp
+        keys = list(log_scores.keys())
+        values = np.array([log_scores[k] for k in keys])
+        values -= values.max()  # numerical stability
+        exp_values = np.exp(values)
+        probs = exp_values / exp_values.sum()
+
+        # Build ranked results
+        results = []
+        for k, p in zip(keys, probs):
+            parts = k.split(":", 1)
+            evidence = self._build_evidence(k, unique_keys)
+            results.append({
+                "alert_key": k,
+                "alertname": parts[0],
+                "service": parts[1] if len(parts) > 1 else "",
+                "probability": round(float(p), 4),
+                "evidence": evidence,
+                "trace_id": key_to_trace_id.get(k),
+            })
+
+        results.sort(key=lambda r: r["probability"], reverse=True)
+
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logger.info(
+            "Alert RCA inference: %d alerts, top cause=%s (%.1f%%), %.1fms",
+            len(unique_keys),
+            results[0]["alert_key"] if results else "none",
+            results[0]["probability"] * 100 if results else 0,
+            elapsed_ms,
+        )
+
+        return results
+
+    def _build_evidence(self, candidate: str, all_keys: list[str]) -> str:
+        """Human-readable evidence for why this alert might be root cause."""
+        parts = []
+
+        # Historical frequency
+        rc_count = self.state.root_cause_counts.get(candidate, 0)
+        if rc_count > 0:
+            parts.append(f"Root cause in {rc_count} prior incident(s)")
+
+        # Temporal ordering
+        first_count = 0
+        for other in all_keys:
+            if other == candidate:
+                continue
+            pair = (candidate, other)
+            first_count += self.state.temporal_order.get(pair, 0)
+        if first_count > 0:
+            parts.append(f"Fired first {first_count} time(s) vs co-occurring alerts")
+
+        # Co-occurrence strength
+        co_count = 0
+        for other in all_keys:
+            if other == candidate:
+                continue
+            co_count += self.state.co_occurrence.get((candidate, other), 0)
+        if co_count > 0:
+            parts.append(f"Co-occurred with {len(all_keys)-1} current alert(s) {co_count} time(s)")
+
+        if not parts:
+            parts.append("No prior history — ranked by temporal ordering")
+
+        return "; ".join(parts)

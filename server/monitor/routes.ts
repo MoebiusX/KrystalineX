@@ -776,6 +776,7 @@ router.get('/query', async (req, res) => {
 
 import { bayesianInference } from '../bayesian';
 import { bayesianClient } from '../bayesian/client';
+import { extractAlertIncidents, getCurrentlyFiringAlerts } from '../bayesian/alert-extractor';
 
 /**
  * GET /api/monitor/bayesian/insights
@@ -819,6 +820,44 @@ router.get('/bayesian/health', async (_req, res) => {
         res.json(health);
     } catch (error: unknown) {
         logger.error({ err: error }, 'Bayesian health check failed');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * POST /api/monitor/bayesian/train-alerts
+ * Train alert correlation model from Alertmanager history.
+ * Pulls recent alerts, clusters into incidents, and feeds to Bayesian service.
+ */
+router.post('/bayesian/train-alerts', async (_req, res) => {
+    try {
+        const incidents = await extractAlertIncidents();
+        if (incidents.length === 0) {
+            return res.json({ status: 'no_data', message: 'No alert incidents to train on' });
+        }
+        const result = await bayesianClient.trainAlerts({ incidents });
+        res.json(result);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Alert correlation training failed');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * POST /api/monitor/bayesian/infer-alerts
+ * Analyze currently-firing alerts to identify the probable root cause.
+ * Enriches alerts with trace IDs from Prometheus exemplars.
+ */
+router.post('/bayesian/infer-alerts', async (_req, res) => {
+    try {
+        const firingAlerts = await getCurrentlyFiringAlerts();
+        if (firingAlerts.length === 0) {
+            return res.json({ probable_root_causes: [], incident_size: 0, message: 'No alerts currently firing' });
+        }
+        const result = await bayesianClient.inferAlerts({ alerts: firingAlerts });
+        res.json(result);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Alert RCA inference failed');
         res.status(502).json({ error: getErrorMessage(error) });
     }
 });

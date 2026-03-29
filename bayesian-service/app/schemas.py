@@ -149,4 +149,83 @@ class HealthResponse(BaseModel):
     status: str = "healthy"
     model_loaded: bool = False
     services_tracked: int = 0
+    alert_model_incidents: int = 0
     last_trained: Optional[str] = None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ALERT CORRELATION — Probabilistic Root Cause Analysis
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class AlertRecord(BaseModel):
+    """A single alert from Alertmanager or the internal anomaly detector."""
+
+    alertname: str = Field(description="Alert rule name, e.g. HighErrorRate")
+    service: str = Field(default="", description="Service that fired the alert")
+    severity: str = Field(default="warning", description="critical | warning | info")
+    fired_at: float = Field(description="Unix epoch seconds when the alert started firing")
+    resolved_at: Optional[float] = Field(default=None, description="Unix epoch seconds when resolved")
+    labels: dict[str, str] = Field(default_factory=dict, description="All alert labels")
+    fingerprint: str = Field(default="", description="Alertmanager fingerprint for dedup")
+    trace_id: Optional[str] = Field(
+        default=None,
+        description="OTEL trace ID that triggered or is associated with this alert",
+    )
+
+
+class AlertIncident(BaseModel):
+    """
+    A cluster of alerts that fired close together, forming a single incident.
+    Optionally includes a human-labeled root cause.
+    """
+
+    id: str = Field(default="", description="Incident ID")
+    alerts: list[AlertRecord] = Field(min_length=1)
+    root_cause_alert: Optional[str] = Field(
+        default=None,
+        description="Alert key (alertname:service) labeled as the actual root cause",
+    )
+    started_at: float = Field(description="Epoch seconds — earliest alert in the cluster")
+    ended_at: Optional[float] = Field(default=None, description="Epoch seconds — latest alert")
+
+
+class TrainAlertsRequest(BaseModel):
+    """Historical alert incidents for correlation model training."""
+
+    incidents: list[AlertIncident] = Field(min_length=1)
+
+
+class TrainAlertsResponse(BaseModel):
+    status: str = "trained"
+    incidents_learned: int
+    unique_alert_types: int
+    co_occurrence_pairs: int
+    message: str = ""
+
+
+class AlertRootCause(BaseModel):
+    """A candidate root cause alert with probability."""
+
+    alert_key: str = Field(description="alertname:service")
+    alertname: str
+    service: str
+    probability: float = Field(ge=0, le=1)
+    evidence: str = Field(default="")
+    trace_id: Optional[str] = Field(
+        default=None,
+        description="OTEL trace ID from exemplar enrichment, linking this alert to the triggering trace",
+    )
+
+
+class InferAlertsRequest(BaseModel):
+    """Currently-firing alerts to analyze for root cause."""
+
+    alerts: list[AlertRecord] = Field(min_length=1)
+
+
+class InferAlertsResponse(BaseModel):
+    probable_root_causes: list[AlertRootCause]
+    incident_size: int
+    model_incidents_learned: int
+    inference_time_ms: float

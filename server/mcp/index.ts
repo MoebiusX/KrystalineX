@@ -20,11 +20,16 @@ const PROM_PATH_PREFIX = process.env.PROMETHEUS_PATH_PREFIX || '';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function fetchJSON(url: string, timeoutMs = 15_000): Promise<any> {
+async function fetchJSON(url: string, timeoutMs = 15_000, method: 'GET' | 'POST' = 'GET'): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const init: RequestInit = { signal: controller.signal, method };
+    if (method === 'POST') {
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = '{}';
+    }
+    const res = await fetch(url, init);
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText} — ${url}`);
     return await res.json();
   } finally {
@@ -636,6 +641,34 @@ server.tool(
   async () => {
     try {
       const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/train`);
+      return textResult(result);
+    } catch (e: any) {
+      return errorResult(e.message);
+    }
+  },
+);
+
+server.tool(
+  'alert_rca',
+  'Analyze currently-firing alerts to identify the most probable root cause. Uses a Noisy-OR Bayesian model trained on historical alert co-occurrence patterns. Returns ranked root cause candidates with probabilities, evidence, and linked trace IDs from Prometheus exemplars.',
+  {},
+  async () => {
+    try {
+      const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/infer-alerts`, 15_000, 'POST');
+      return textResult(result);
+    } catch (e: any) {
+      return errorResult(e.message);
+    }
+  },
+);
+
+server.tool(
+  'alert_rca_train',
+  'Train the alert correlation model from recent Alertmanager history. Pulls alerts, clusters into incidents, and learns co-occurrence patterns for root cause analysis.',
+  {},
+  async () => {
+    try {
+      const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/train-alerts`, 30_000, 'POST');
       return textResult(result);
     } catch (e: any) {
       return errorResult(e.message);
