@@ -25,6 +25,13 @@ spec:
           ports:
             - name: http
               containerPort: 8100
+          env:
+            - name: ALERTMANAGER_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-alertmanager:9093"
+            - name: PROMETHEUS_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-prometheus:9090"
+            - name: POLL_INTERVAL_SECONDS
+              value: "30"
           resources:
             {{- toYaml .Values.bayesianService.resources | nindent 12 }}
           livenessProbe:

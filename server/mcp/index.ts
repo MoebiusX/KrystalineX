@@ -650,11 +650,11 @@ server.tool(
 
 server.tool(
   'alert_rca',
-  'Analyze currently-firing alerts to identify the most probable root cause. Uses a Noisy-OR Bayesian model trained on historical alert co-occurrence patterns. Returns ranked root cause candidates with probabilities, evidence, and linked trace IDs from Prometheus exemplars.',
+  'Get the latest autonomous alert root cause analysis. The Bayesian service polls Alertmanager every 30s, enriches alerts with Prometheus exemplar trace IDs, and runs Noisy-OR inference automatically. Returns ranked root cause candidates with probabilities, evidence, and linked trace IDs.',
   {},
   async () => {
     try {
-      const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/infer-alerts`, 15_000, 'POST');
+      const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/alert-rca`);
       return textResult(result);
     } catch (e: any) {
       return errorResult(e.message);

@@ -90,6 +90,13 @@ export class BayesianClient {
         return this.request<InferAlertsResponse>('POST', '/infer-alerts', data);
     }
 
+    /**
+     * GET /alert-rca — Get latest autonomous alert RCA result
+     */
+    async getAlertRCA(): Promise<unknown> {
+        return this.request<unknown>('GET', '/alert-rca');
+    }
+
     // ─── Internal ───────────────────────────────────────────────────────
 
     private async request<T>(

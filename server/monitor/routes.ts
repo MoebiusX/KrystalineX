@@ -862,5 +862,21 @@ router.post('/bayesian/infer-alerts', async (_req, res) => {
     }
 });
 
+/**
+ * GET /api/monitor/bayesian/alert-rca
+ * Get the latest autonomous alert RCA result from the Bayesian service's
+ * background polling loop. No manual trigger needed — the service polls
+ * Alertmanager every 30s and runs inference automatically.
+ */
+router.get('/bayesian/alert-rca', async (_req, res) => {
+    try {
+        const result = await bayesianClient.getAlertRCA();
+        res.json(result);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Failed to fetch autonomous alert RCA');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
 export default router;
 
