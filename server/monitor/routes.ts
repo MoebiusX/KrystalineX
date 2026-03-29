@@ -770,5 +770,58 @@ router.get('/query', async (req, res) => {
     }
 });
 
+// ============================================
+// Bayesian Inference Routes (Probabilistic Observability)
+// ============================================
+
+import { bayesianInference } from '../bayesian';
+import { bayesianClient } from '../bayesian/client';
+
+/**
+ * GET /api/monitor/bayesian/insights
+ * Latest probabilistic anomaly insights from the Bayesian inference engine.
+ */
+router.get('/bayesian/insights', (_req, res) => {
+    try {
+        const insights = bayesianInference.getLatestInsights();
+        res.json({
+            insights,
+            count: insights.length,
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Failed to get Bayesian insights');
+        res.status(500).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * POST /api/monitor/bayesian/train
+ * Trigger a manual retraining of the Bayesian model.
+ */
+router.post('/bayesian/train', async (_req, res) => {
+    try {
+        const result = await bayesianInference.train();
+        res.json(result);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Bayesian training failed');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * GET /api/monitor/bayesian/health
+ * Health check for the Bayesian service.
+ */
+router.get('/bayesian/health', async (_req, res) => {
+    try {
+        const health = await bayesianClient.health();
+        res.json(health);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Bayesian health check failed');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
 export default router;
 

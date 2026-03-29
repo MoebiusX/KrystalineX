@@ -588,10 +588,59 @@ server.resource(
 ## Anomaly Detection
 - Trace-based: Z-score > 6.6σ on span durations (Welford's algorithm, 168 hourly buckets)
 - Amount-based: Z-score > 3.0σ on transaction amounts (whale detection)
+- Bayesian: Hierarchical probabilistic model (PyMC) for latency/error anomaly with root cause ranking
 - LLM RCA: Ollama-powered root cause analysis with Prometheus metric correlation
 `,
     }],
   }),
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BAYESIAN INFERENCE — Probabilistic anomaly detection
+// ═══════════════════════════════════════════════════════════════════════════
+
+const BAYESIAN_URL = process.env.BAYESIAN_SERVICE_URL || 'http://localhost:8100';
+
+server.tool(
+  'bayesian_health',
+  'Check health of the Bayesian inference service.',
+  {},
+  async () => {
+    try {
+      const data = await fetchJSON(`${BAYESIAN_URL}/health`);
+      return textResult(data);
+    } catch (e: any) {
+      return errorResult(`Bayesian service unreachable: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  'bayesian_insights',
+  'Get probabilistic anomaly insights: anomaly probabilities, ranked root causes with confidence scores for each service.',
+  {},
+  async () => {
+    try {
+      const monitor = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/insights`);
+      return textResult(monitor);
+    } catch (e: any) {
+      return errorResult(e.message);
+    }
+  },
+);
+
+server.tool(
+  'bayesian_train',
+  'Trigger Bayesian model retraining from current trace baselines.',
+  {},
+  async () => {
+    try {
+      const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/train`);
+      return textResult(result);
+    } catch (e: any) {
+      return errorResult(e.message);
+    }
+  },
 );
 
 // ─── Utility ────────────────────────────────────────────────────────────────

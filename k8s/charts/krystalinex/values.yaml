@@ -376,6 +376,23 @@ otelMcpServer:
       cpu: 50m
       memory: 128Mi
 
+bayesianService:
+  enabled: true
+  image:
+    repository: moebiusx/bayesian-service
+    tag: v1.0.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8100
+  resources:
+    limits:
+      cpu: "1"
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
 maildev:
   enabled: true  # Dev SMTP server
   image:

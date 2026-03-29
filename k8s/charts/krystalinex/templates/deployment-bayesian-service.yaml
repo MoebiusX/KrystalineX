@@ -1,0 +1,61 @@
+{{- if .Values.bayesianService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-bayesian-service
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bayesian-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "krystalinex.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: bayesian-service
+  template:
+    metadata:
+      labels:
+        {{- include "krystalinex.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bayesian-service
+    spec:
+      containers:
+        - name: bayesian-service
+          image: "{{ .Values.bayesianService.image.repository }}:{{ .Values.bayesianService.image.tag }}"
+          imagePullPolicy: {{ .Values.bayesianService.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8100
+          resources:
+            {{- toYaml .Values.bayesianService.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-bayesian-service
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bayesian-service
+spec:
+  type: {{ .Values.bayesianService.service.type }}
+  ports:
+    - port: {{ .Values.bayesianService.service.port }}
+      targetPort: http
+      name: http
+  selector:
+    {{- include "krystalinex.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: bayesian-service
+{{- end }}

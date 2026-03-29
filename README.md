@@ -121,6 +121,14 @@ Adaptive, time‑aware anomaly detection across two dimensions:
 - Enable with `ENABLE_AMOUNT_ANOMALY_DETECTION=true`
 - Passive 🐋 WHALE ALERT logging and `/api/monitor/amount-anomalies` endpoint
 
+**Bayesian inference** — hierarchical probabilistic model (PyMC) for uncertainty‑aware anomaly detection:
+- Enable with `ENABLE_BAYESIAN_INFERENCE=true` (requires `bayesian-service` container)
+- **Latency model:** hierarchical LogNormal with global ↔ service shrinkage
+- **Error model:** Beta‑Bernoulli with dependency‑aware prior propagation
+- Ranked root‑cause identification with confidence scores
+- Trend detection across time windows (5m / 15m / 1h)
+- API: `/api/monitor/bayesian/insights`, `/api/monitor/bayesian/train`, `/api/monitor/bayesian/health`
+
 → *Deep dive:*
   [Anomaly Detection Design](docs/observability/02_ANOMALY_DETECTION_DESIGN.md)
 
@@ -234,6 +242,9 @@ Prometheus → Alertmanager → GoAlert (SMS / voice) + ntfy (push notifications
 | `/api/monitor/health` | GET | system health / liveness |
 | `/api/monitor/anomalies` | GET | active trace anomalies (SEV 1‑5) |
 | `/api/monitor/amount-anomalies` | GET | active whale alerts |
+| `/api/monitor/bayesian/insights` | GET | probabilistic anomaly insights with root causes |
+| `/api/monitor/bayesian/train` | POST | trigger Bayesian model retraining |
+| `/api/monitor/bayesian/health` | GET | Bayesian service health check |
 | `/api/monitor/recalculate` | POST | trigger baseline recalculation |
 | `/api/monitor/time-baselines` | GET | view computed time‑aware baselines |
 | `/api/monitor/training/stats` | GET | LLM training data statistics |

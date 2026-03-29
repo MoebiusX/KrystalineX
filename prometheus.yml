@@ -135,3 +135,14 @@ scrape_configs:
       - targets: ['promtail:9080']
     metrics_path: /metrics
     scrape_interval: 15s
+
+  # ============================================
+  # AI / ML SERVICES
+  # ============================================
+
+  # Bayesian Inference Service (PyMC + FastAPI)
+  - job_name: 'bayesian-service'
+    static_configs:
+      - targets: ['bayesian-service:8100']
+    metrics_path: /metrics
+    scrape_interval: 30s

@@ -23,6 +23,7 @@ import { anomalyDetector } from './anomaly-detector';
 import { historyStore } from './history-store';
 import { amountProfiler } from './amount-profiler';
 import { amountAnomalyDetector } from './amount-anomaly-detector';
+import { bayesianInference } from '../bayesian';
 
 /**
  * Start all monitor services
@@ -55,6 +56,17 @@ export function startMonitor(): void {
         logger.info('Amount anomaly detection is disabled (set ENABLE_AMOUNT_ANOMALY_DETECTION=true to enable)');
     }
 
+    // Start Bayesian inference (if enabled)
+    if (config.monitor.enableBayesianInference) {
+        logger.info('🧠 Bayesian probabilistic inference ENABLED');
+        // Delay start to allow trace profiler baselines to populate
+        setTimeout(() => {
+            bayesianInference.start();
+        }, 70000);
+    } else {
+        logger.info('Bayesian inference is disabled (set ENABLE_BAYESIAN_INFERENCE=true to enable)');
+    }
+
     logger.info('Monitor services started successfully');
 }
 
@@ -71,6 +83,9 @@ export function stopMonitor(): void {
     // Stop amount anomaly detection services
     amountAnomalyDetector.stop();
     amountProfiler.stop();
+
+    // Stop Bayesian inference
+    bayesianInference.stop();
 
     logger.info('Monitor services stopped');
 }
