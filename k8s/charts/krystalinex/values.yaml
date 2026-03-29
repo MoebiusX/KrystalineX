@@ -174,7 +174,7 @@ goalert:
     repository: goalert/goalert
     tag: latest
   persistence:
-    enabled: false
+    enabled: true
     size: 5Gi
 
 alertmanager:
