@@ -6,12 +6,16 @@ Endpoints:
   POST /infer  — Produce anomaly probabilities and root cause rankings
   GET  /health — Service health check
   GET  /metrics — Prometheus metrics
+  GET  /alert-rca — Latest autonomous alert RCA result
+  POST /train-alerts — Manual alert training
+  POST /infer-alerts — Manual alert inference
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +23,7 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTEN
 from starlette.responses import Response
 
 from .models import BayesianInferenceEngine, AlertCorrelationEngine
+from .poller import AutonomousPoller
 from .schemas import (
     HealthResponse,
     InferRequest,
@@ -51,13 +56,31 @@ SERVICES_TRACKED = Gauge("bayesian_services_tracked", "Number of services curren
 ALERT_TRAIN_REQUESTS = Counter("bayesian_alert_train_requests_total", "Alert correlation training requests")
 ALERT_INFER_REQUESTS = Counter("bayesian_alert_infer_requests_total", "Alert RCA inference requests")
 ALERT_INCIDENTS_LEARNED = Gauge("bayesian_alert_incidents_learned", "Total alert incidents learned")
+POLL_CYCLES = Gauge("bayesian_poll_cycles_total", "Autonomous polling cycles completed")
+POLL_ERRORS = Gauge("bayesian_poll_errors_total", "Autonomous polling errors")
 
 # ─── Application ─────────────────────────────────────────────────────────────
 
+engine = BayesianInferenceEngine()
+alert_engine = AlertCorrelationEngine()
+poller = AutonomousPoller(alert_engine)
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Start/stop the autonomous alert poller with the application."""
+    await poller.start()
+    logger.info("Bayesian service started with autonomous alert polling")
+    yield
+    await poller.stop()
+    logger.info("Bayesian service shutting down")
+
+
 app = FastAPI(
     title="KrystalineX Bayesian Inference Service",
-    version="1.0.0",
+    version="1.2.0",
     description="Hierarchical Bayesian modeling for distributed system observability",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -71,9 +94,6 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
-engine = BayesianInferenceEngine()
-alert_engine = AlertCorrelationEngine()
-
 
 @app.get("/metrics")
 async def metrics():
@@ -81,6 +101,8 @@ async def metrics():
     MODEL_TRAINED.set(1 if engine.is_trained else 0)
     SERVICES_TRACKED.set(len(engine.state.posteriors))
     ALERT_INCIDENTS_LEARNED.set(alert_engine.incidents_learned)
+    POLL_CYCLES.set(poller.state.poll_count)
+    POLL_ERRORS.set(poller.state.error_count)
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
@@ -202,3 +224,38 @@ async def infer_alerts(req: InferAlertsRequest) -> InferAlertsResponse:
     except Exception as e:
         logger.exception("Alert inference failed")
         raise HTTPException(status_code=500, detail=f"Alert inference failed: {e}") from e
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  AUTONOMOUS ALERT RCA — Latest result from background polling
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@app.get("/alert-rca")
+async def alert_rca():
+    """
+    Return the latest autonomous alert RCA result.
+
+    The poller fetches alerts from Alertmanager every POLL_INTERVAL_SECONDS,
+    enriches with Prometheus exemplar traceIds, clusters into incidents,
+    and runs Bayesian inference. This endpoint returns the latest result.
+    """
+    rca = poller.latest_rca
+    if rca is None:
+        return {
+            "status": "no_data",
+            "message": "No alert RCA available — either no alerts are firing or poller has not run yet",
+            "poller": {
+                "poll_count": poller.state.poll_count,
+                "last_poll_at": poller.state.last_poll_at,
+                "error_count": poller.state.error_count,
+            },
+        }
+    return {
+        **rca,
+        "poller": {
+            "poll_count": poller.state.poll_count,
+            "last_poll_at": poller.state.last_poll_at,
+            "error_count": poller.state.error_count,
+        },
+    }

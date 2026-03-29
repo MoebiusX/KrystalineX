@@ -459,6 +459,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8100:8100"
+    environment:
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      - PROMETHEUS_URL=http://prometheus:9090
+      - POLL_INTERVAL_SECONDS=30
     networks:
       - kong-net
     restart: unless-stopped

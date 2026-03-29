@@ -9,6 +9,7 @@ import type {
 import { SEVERITY_CONFIG } from './types';
 import { traceProfiler } from './trace-profiler';
 import { streamAnalyzer } from './stream-analyzer';
+import { fireAnomalyAlert } from './alertmanager-notifier';
 import { config } from '../config';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
@@ -185,6 +186,10 @@ export class AnomalyDetector {
                         if (anomaly.severity <= 3) {
                             streamAnalyzer.enqueue(anomaly).catch(err =>
                                 logger.error({ err }, 'Failed to enqueue anomaly for streaming analysis')
+                            );
+                            // Fire alert to Alertmanager so Bayesian RCA can correlate
+                            fireAnomalyAlert(anomaly).catch(err =>
+                                logger.debug({ err }, 'Failed to send anomaly alert to Alertmanager')
                             );
                         }
 
