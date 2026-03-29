@@ -170,6 +170,15 @@ data:
         scrape_interval: 30s
       {{- end }}
 
+      # Bayesian Inference Service (probabilistic anomaly detection)
+      {{- if .Values.bayesianService.enabled }}
+      - job_name: 'bayesian-service'
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-bayesian-service:8100']
+        metrics_path: /metrics
+        scrape_interval: 30s
+      {{- end }}
+
   alerting-rules.yml: |
     # KrystalineX Prometheus Alerting Rules
     groups:

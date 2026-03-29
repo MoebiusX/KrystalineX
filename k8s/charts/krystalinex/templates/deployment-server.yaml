@@ -106,6 +106,12 @@ spec:
             - name: EMAIL_FROM
               value: {{ .Values.server.env.EMAIL_FROM | default "\"Krystaline\" <no-reply@krystaline.io>" | quote }}
             {{- end }}
+            {{- if .Values.bayesianService.enabled }}
+            - name: BAYESIAN_SERVICE_URL
+              value: "http://{{ include "krystalinex.fullname" . }}-bayesian-service:8100"
+            - name: ENABLE_BAYESIAN_INFERENCE
+              value: "true"
+            {{- end }}
           {{- with .Values.server.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

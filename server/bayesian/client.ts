@@ -13,10 +13,10 @@ import type {
     BayesianHealthResponse,
 } from './types';
 import { createLogger } from '../lib/logger';
+import { config } from '../config';
 
 const logger = createLogger('bayesian-client');
 
-const DEFAULT_BASE_URL = process.env.BAYESIAN_SERVICE_URL || 'http://localhost:8100';
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class BayesianClient {
@@ -27,7 +27,7 @@ export class BayesianClient {
     private healthCheckIntervalMs = 30_000;
 
     constructor(baseUrl?: string, timeoutMs?: number) {
-        this.baseUrl = baseUrl ?? DEFAULT_BASE_URL;
+        this.baseUrl = baseUrl ?? config?.bayesianService?.url ?? 'http://localhost:8100';
         this.timeoutMs = timeoutMs ?? DEFAULT_TIMEOUT_MS;
     }
 
