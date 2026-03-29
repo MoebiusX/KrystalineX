@@ -159,7 +159,8 @@ services:
   jaeger:
     image: jaegertracing/all-in-one:latest
     environment:
-      COLLECTOR_OTLP_ENABLED: true
+      COLLECTOR_OTLP_ENABLED: "true"
+      MEMORY_MAX_TRACES: "5000"
     ports:
       - "16686:16686" # Jaeger UI
       - "14350:14250" # Jaeger gRPC (host 14350 -> container 14250)
@@ -210,10 +211,10 @@ services:
               count: 1
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      test: ["CMD", "ollama", "list"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 120s
 
   # Prometheus - Metrics collection and storage
@@ -229,8 +230,8 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
-      - '--storage.tsdb.retention.size=10GB'
+      - '--storage.tsdb.retention.time=12h'
+      - '--storage.tsdb.retention.size=2GB'
       - '--web.enable-lifecycle'
       - '--enable-feature=exemplar-storage'
     networks:
