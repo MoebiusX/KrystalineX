@@ -770,5 +770,113 @@ router.get('/query', async (req, res) => {
     }
 });
 
+// ============================================
+// Bayesian Inference Routes (Probabilistic Observability)
+// ============================================
+
+import { bayesianInference } from '../bayesian';
+import { bayesianClient } from '../bayesian/client';
+import { extractAlertIncidents, getCurrentlyFiringAlerts } from '../bayesian/alert-extractor';
+
+/**
+ * GET /api/monitor/bayesian/insights
+ * Latest probabilistic anomaly insights from the Bayesian inference engine.
+ */
+router.get('/bayesian/insights', (_req, res) => {
+    try {
+        const insights = bayesianInference.getLatestInsights();
+        res.json({
+            insights,
+            count: insights.length,
+            timestamp: new Date().toISOString(),
+        });
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Failed to get Bayesian insights');
+        res.status(500).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * POST /api/monitor/bayesian/train
+ * Trigger a manual retraining of the Bayesian model.
+ */
+router.post('/bayesian/train', async (_req, res) => {
+    try {
+        const result = await bayesianInference.train();
+        res.json(result);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Bayesian training failed');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * GET /api/monitor/bayesian/health
+ * Health check for the Bayesian service.
+ */
+router.get('/bayesian/health', async (_req, res) => {
+    try {
+        const health = await bayesianClient.health();
+        res.json(health);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Bayesian health check failed');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * POST /api/monitor/bayesian/train-alerts
+ * Train alert correlation model from Alertmanager history.
+ * Pulls recent alerts, clusters into incidents, and feeds to Bayesian service.
+ */
+router.post('/bayesian/train-alerts', async (_req, res) => {
+    try {
+        const incidents = await extractAlertIncidents();
+        if (incidents.length === 0) {
+            return res.json({ status: 'no_data', message: 'No alert incidents to train on' });
+        }
+        const result = await bayesianClient.trainAlerts({ incidents });
+        res.json(result);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Alert correlation training failed');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * POST /api/monitor/bayesian/infer-alerts
+ * Analyze currently-firing alerts to identify the probable root cause.
+ * Enriches alerts with trace IDs from Prometheus exemplars.
+ */
+router.post('/bayesian/infer-alerts', async (_req, res) => {
+    try {
+        const firingAlerts = await getCurrentlyFiringAlerts();
+        if (firingAlerts.length === 0) {
+            return res.json({ probable_root_causes: [], incident_size: 0, message: 'No alerts currently firing' });
+        }
+        const result = await bayesianClient.inferAlerts({ alerts: firingAlerts });
+        res.json(result);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Alert RCA inference failed');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
+/**
+ * GET /api/monitor/bayesian/alert-rca
+ * Get the latest autonomous alert RCA result from the Bayesian service's
+ * background polling loop. No manual trigger needed — the service polls
+ * Alertmanager every 30s and runs inference automatically.
+ */
+router.get('/bayesian/alert-rca', async (_req, res) => {
+    try {
+        const result = await bayesianClient.getAlertRCA();
+        res.json(result);
+    } catch (error: unknown) {
+        logger.error({ err: error }, 'Failed to fetch autonomous alert RCA');
+        res.status(502).json({ error: getErrorMessage(error) });
+    }
+});
+
 export default router;
 

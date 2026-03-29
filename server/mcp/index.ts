@@ -20,11 +20,16 @@ const PROM_PATH_PREFIX = process.env.PROMETHEUS_PATH_PREFIX || '';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-async function fetchJSON(url: string, timeoutMs = 15_000): Promise<any> {
+async function fetchJSON(url: string, timeoutMs = 15_000, method: 'GET' | 'POST' = 'GET'): Promise<any> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const init: RequestInit = { signal: controller.signal, method };
+    if (method === 'POST') {
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = '{}';
+    }
+    const res = await fetch(url, init);
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText} — ${url}`);
     return await res.json();
   } finally {
@@ -588,10 +593,87 @@ server.resource(
 ## Anomaly Detection
 - Trace-based: Z-score > 6.6σ on span durations (Welford's algorithm, 168 hourly buckets)
 - Amount-based: Z-score > 3.0σ on transaction amounts (whale detection)
+- Bayesian: Hierarchical probabilistic model (PyMC) for latency/error anomaly with root cause ranking
 - LLM RCA: Ollama-powered root cause analysis with Prometheus metric correlation
 `,
     }],
   }),
+);
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  BAYESIAN INFERENCE — Probabilistic anomaly detection
+// ═══════════════════════════════════════════════════════════════════════════
+
+const BAYESIAN_URL = process.env.BAYESIAN_SERVICE_URL || 'http://localhost:8100';
+
+server.tool(
+  'bayesian_health',
+  'Check health of the Bayesian inference service.',
+  {},
+  async () => {
+    try {
+      const data = await fetchJSON(`${BAYESIAN_URL}/health`);
+      return textResult(data);
+    } catch (e: any) {
+      return errorResult(`Bayesian service unreachable: ${e.message}`);
+    }
+  },
+);
+
+server.tool(
+  'bayesian_insights',
+  'Get probabilistic anomaly insights: anomaly probabilities, ranked root causes with confidence scores for each service.',
+  {},
+  async () => {
+    try {
+      const monitor = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/insights`);
+      return textResult(monitor);
+    } catch (e: any) {
+      return errorResult(e.message);
+    }
+  },
+);
+
+server.tool(
+  'bayesian_train',
+  'Trigger Bayesian model retraining from current trace baselines.',
+  {},
+  async () => {
+    try {
+      const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/train`);
+      return textResult(result);
+    } catch (e: any) {
+      return errorResult(e.message);
+    }
+  },
+);
+
+server.tool(
+  'alert_rca',
+  'Get the latest autonomous alert root cause analysis. The Bayesian service polls Alertmanager every 30s, enriches alerts with Prometheus exemplar trace IDs, and runs Noisy-OR inference automatically. Returns ranked root cause candidates with probabilities, evidence, and linked trace IDs.',
+  {},
+  async () => {
+    try {
+      const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/alert-rca`);
+      return textResult(result);
+    } catch (e: any) {
+      return errorResult(e.message);
+    }
+  },
+);
+
+server.tool(
+  'alert_rca_train',
+  'Train the alert correlation model from recent Alertmanager history. Pulls alerts, clusters into incidents, and learns co-occurrence patterns for root cause analysis.',
+  {},
+  async () => {
+    try {
+      const result = await fetchJSON(`${KX_API_URL}/api/monitor/bayesian/train-alerts`, 30_000, 'POST');
+      return textResult(result);
+    } catch (e: any) {
+      return errorResult(e.message);
+    }
+  },
 );
 
 // ─── Utility ────────────────────────────────────────────────────────────────

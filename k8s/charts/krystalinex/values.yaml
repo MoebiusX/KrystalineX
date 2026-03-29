@@ -16,7 +16,7 @@ secrets:
 
 server:
   enabled: true
-  replicaCount: 1
+  replicaCount: 3
   image:
     repository: moebiusx/krystalinex-server
     tag: v2.6.4
@@ -89,7 +89,7 @@ paymentProcessor:
 
 frontend:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: moebiusx/krystalinex-frontend
     tag: v2.1.25
@@ -375,6 +375,23 @@ otelMcpServer:
     requests:
       cpu: 50m
       memory: 128Mi
+
+bayesianService:
+  enabled: true
+  image:
+    repository: moebiusx/bayesian-service
+    tag: v1.2.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8100
+  resources:
+    limits:
+      cpu: "1"
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
 
 maildev:
   enabled: true  # Dev SMTP server

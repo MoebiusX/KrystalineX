@@ -449,6 +449,34 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ============================================
+  # BAYESIAN INFERENCE SERVICE
+  # ============================================
+
+  bayesian-service:
+    build:
+      context: ./bayesian-service
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8100"
+    environment:
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      - PROMETHEUS_URL=http://prometheus:9090
+      - POLL_INTERVAL_SECONDS=30
+    networks:
+      - kong-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
   # NOTE: Node.js services (kx-exchange, payment-processor, frontend) run natively on the host.
   # Start them with: npm run dev (or individual scripts)
   # This avoids Docker overhead and enables faster development iteration.

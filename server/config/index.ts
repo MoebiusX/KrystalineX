@@ -89,6 +89,11 @@ const configSchema = z.object({
   // Monitor/Anomaly Detection Features
   monitor: z.object({
     enableAmountAnomalyDetection: z.boolean().default(false),
+    enableBayesianInference: z.boolean().default(false),
+  }),
+
+  bayesianService: z.object({
+    url: z.string().default('http://localhost:8100'),
   }),
 });
 
@@ -222,6 +227,11 @@ function loadConfig() {
     // Monitor/Anomaly Detection Features
     monitor: {
       enableAmountAnomalyDetection: process.env.ENABLE_AMOUNT_ANOMALY_DETECTION === 'true',
+      enableBayesianInference: process.env.ENABLE_BAYESIAN_INFERENCE === 'true',
+    },
+
+    bayesianService: {
+      url: process.env.BAYESIAN_SERVICE_URL || 'http://localhost:8100',
     },
   };
 

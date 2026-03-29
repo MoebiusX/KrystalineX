@@ -35,7 +35,6 @@ async function main(): Promise<void> {
   }
 
   const config = loadConfig();
-  const server = createServer(config, options);
 
   // Parse --http flag
   const httpIndex = args.indexOf('--http');
@@ -49,12 +48,18 @@ async function main(): Promise<void> {
     if (!authEnabled) {
       console.error('  Auth:    ⚠ No client keys configured — HTTP server is OPEN');
       console.error('           Set MCP_AUTH_KEYS env or mount auth-keys.json');
+    } else {
+      console.error(`  Auth:    ${clientKeys.length} client key(s) loaded`);
     }
 
     const { StreamableHTTPServerTransport } = await import(
       '@modelcontextprotocol/sdk/server/streamableHttp.js'
     );
+    const { randomUUID } = await import('node:crypto');
     const http = await import('node:http');
+
+    // Session map: each MCP client gets its own server+transport pair
+    const sessions = new Map<string, { transport: InstanceType<typeof StreamableHTTPServerTransport> }>();
 
     const httpServer = http.createServer(async (req, res) => {
       // Health check — always open
@@ -66,6 +71,7 @@ async function main(): Promise<void> {
           version: VERSION,
           auth: authEnabled ? 'enabled' : 'disabled',
           tools: options.tools || ['traces', 'metrics', 'logs', 'zk-proofs', 'system'],
+          sessions: sessions.size,
         }));
         return;
       }
@@ -74,8 +80,9 @@ async function main(): Promise<void> {
       if (req.method === 'OPTIONS') {
         res.writeHead(204, {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key, Mcp-Session-Id',
+          'Access-Control-Expose-Headers': 'Mcp-Session-Id',
         });
         res.end();
         return;
@@ -97,9 +104,39 @@ async function main(): Promise<void> {
         }
       }
 
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      res.on('close', () => transport.close());
-      await server.connect(transport);
+      // Session-based routing: existing sessions vs new connections
+      const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+      if (sessionId && sessions.has(sessionId)) {
+        // Route to existing session
+        const session = sessions.get(sessionId)!;
+        await session.transport.handleRequest(req, res);
+        return;
+      }
+
+      if (sessionId && !sessions.has(sessionId)) {
+        // Client sent an unknown session ID
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found', sessionId }));
+        return;
+      }
+
+      // New session — create a fresh server+transport pair
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid: string) => {
+          sessions.set(sid, { transport });
+        },
+      });
+      const sessionServer = createServer(config, options);
+      await sessionServer.connect(transport);
+
+      transport.onclose = () => {
+        if (transport.sessionId) {
+          sessions.delete(transport.sessionId);
+        }
+      };
+
       await transport.handleRequest(req, res);
     });
 
@@ -115,6 +152,7 @@ async function main(): Promise<void> {
     });
   } else {
     // ── stdio transport (default) ─────────────────────────────────────────
+    const server = createServer(config, options);
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error(`✓ otel-mcp-server v${VERSION} running on stdio`);

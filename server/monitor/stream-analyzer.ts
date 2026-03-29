@@ -8,6 +8,7 @@
 import type { Anomaly } from './types';
 import { wsServer } from './ws-server';
 import { metricsCorrelator } from './metrics-correlator';
+import { enrichAlertWithAnalysis } from './alertmanager-notifier';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
 import { Counter, Histogram, Gauge } from 'prom-client';
@@ -316,6 +317,11 @@ class StreamAnalyzer {
         }
 
         wsServer.analysisComplete(anomalyIds, fullResponse);
+
+        // Update Alertmanager alerts with LLM analysis text
+        for (const anomaly of anomalies) {
+            enrichAlertWithAnalysis(anomaly.service, anomaly.operation, fullResponse).catch(() => {});
+        }
     }
 
     /**

@@ -1,0 +1,849 @@
+"""
+Hierarchical Bayesian Models for Latency and Error Analysis.
+
+Uses PyMC for probabilistic modeling of:
+1. Latency: Hierarchical LogNormal model with global + service-level parameters
+2. Errors: Beta-Bernoulli model for per-service error rates
+3. Dependency-aware scoring: Propagation of anomaly through service graph
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from dataclasses import dataclass, field
+from typing import Optional
+
+import numpy as np
+import pymc as pm
+import arviz as az
+
+from .schemas import (
+    DependencyGraph,
+    InferResponse,
+    RootCause,
+    ServiceInference,
+    ServiceMetrics,
+    TimeWindow,
+)
+
+logger = logging.getLogger("bayesian.models")
+
+
+@dataclass
+class ServicePosterior:
+    """Cached posterior parameters for a single service."""
+
+    mu: float
+    sigma: float
+    error_alpha: float
+    error_beta: float
+    sample_count: int
+
+
+@dataclass
+class ModelState:
+    """Cached model state to avoid retraining on every request."""
+
+    posteriors: dict[str, ServicePosterior] = field(default_factory=dict)
+    global_mu: float = 0.0
+    global_sigma: float = 1.0
+    trained: bool = False
+    last_trained: Optional[str] = None
+    samples_used: int = 0
+
+
+class BayesianInferenceEngine:
+    """
+    Hierarchical Bayesian inference for distributed system observability.
+
+    Training fits a hierarchical model to historical data and caches
+    posterior parameters. Inference uses those parameters + current
+    observations to produce anomaly probabilities and root cause rankings.
+    """
+
+    def __init__(self) -> None:
+        self.state = ModelState()
+
+    @property
+    def is_trained(self) -> bool:
+        return self.state.trained
+
+    # ─── Training ────────────────────────────────────────────────────────
+
+    def train(
+        self,
+        services: list[ServiceMetrics],
+        dependency_graph: DependencyGraph,
+        raw_latencies: Optional[dict[str, list[float]]] = None,
+    ) -> dict:
+        """
+        Fit the hierarchical Bayesian model to historical service metrics.
+
+        When raw_latencies is provided (service_name → list of durations),
+        the full hierarchical model is sampled with PyMC.  Otherwise, we
+        derive conjugate-style posteriors analytically from summary stats.
+        """
+        start = time.time()
+
+        if raw_latencies and any(len(v) >= 10 for v in raw_latencies.values()):
+            self._train_full_model(services, raw_latencies)
+        else:
+            self._train_from_summary(services)
+
+        self._incorporate_dependency_priors(dependency_graph)
+
+        elapsed = time.time() - start
+        self.state.trained = True
+        self.state.last_trained = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self.state.samples_used = sum(s.latency.sample_count for s in services)
+
+        logger.info(
+            "Model trained in %.1fms for %d services (%d samples)",
+            elapsed * 1000,
+            len(services),
+            self.state.samples_used,
+        )
+
+        return {
+            "services_modeled": list(self.state.posteriors.keys()),
+            "samples_used": self.state.samples_used,
+            "training_time_ms": round(elapsed * 1000, 1),
+        }
+
+    def _train_full_model(
+        self,
+        services: list[ServiceMetrics],
+        raw_latencies: dict[str, list[float]],
+    ) -> None:
+        """
+        Full hierarchical PyMC model:
+
+        Global:
+            mu_global     ~ Normal(0, 1)
+            sigma_global  ~ HalfNormal(1)
+        Per-service:
+            mu_service[i]    ~ Normal(mu_global, sigma_global)
+            sigma_service[i] ~ HalfNormal(1)
+        Observation:
+            log(latency) ~ Normal(mu_service[i], sigma_service[i])
+        """
+        svc_names = [s.service_name for s in services if s.service_name in raw_latencies]
+        if not svc_names:
+            self._train_from_summary(services)
+            return
+
+        # Prepare data: log-transform positive latencies
+        svc_indices: list[int] = []
+        log_latencies: list[float] = []
+        for idx, name in enumerate(svc_names):
+            vals = [v for v in raw_latencies[name] if v > 0]
+            for v in vals:
+                log_latencies.append(np.log(v))
+                svc_indices.append(idx)
+
+        if len(log_latencies) < 5:
+            self._train_from_summary(services)
+            return
+
+        n_services = len(svc_names)
+        svc_idx_arr = np.array(svc_indices, dtype=int)
+        obs_arr = np.array(log_latencies, dtype=float)
+
+        with pm.Model() as model:
+            # Global hyperpriors
+            mu_global = pm.Normal("mu_global", mu=np.mean(obs_arr), sigma=1.0)
+            sigma_global = pm.HalfNormal("sigma_global", sigma=1.0)
+
+            # Service-level parameters
+            mu_service = pm.Normal(
+                "mu_service", mu=mu_global, sigma=sigma_global, shape=n_services
+            )
+            sigma_service = pm.HalfNormal("sigma_service", sigma=1.0, shape=n_services)
+
+            # Likelihood
+            pm.Normal(
+                "obs",
+                mu=mu_service[svc_idx_arr],
+                sigma=sigma_service[svc_idx_arr],
+                observed=obs_arr,
+            )
+
+            # Sample — use fewer samples for speed; we cache posteriors
+            trace = pm.sample(
+                draws=500,
+                tune=200,
+                chains=2,
+                cores=1,  # single-core for container compatibility
+                return_inferencedata=True,
+                progressbar=False,
+            )
+
+        # Extract posterior summaries
+        summary = az.summary(trace, var_names=["mu_global", "sigma_global", "mu_service", "sigma_service"])
+
+        self.state.global_mu = float(summary.loc["mu_global", "mean"])
+        self.state.global_sigma = float(summary.loc["sigma_global", "mean"])
+
+        for idx, name in enumerate(svc_names):
+            mu_key = f"mu_service[{idx}]"
+            sigma_key = f"sigma_service[{idx}]"
+            mu_val = float(summary.loc[mu_key, "mean"]) if mu_key in summary.index else 0.0
+            sigma_val = float(summary.loc[sigma_key, "mean"]) if sigma_key in summary.index else 1.0
+
+            # Derive error model from observed data
+            svc_metrics = next((s for s in services if s.service_name == name), None)
+            alpha, beta = self._error_posterior(svc_metrics)
+
+            self.state.posteriors[name] = ServicePosterior(
+                mu=mu_val,
+                sigma=sigma_val,
+                error_alpha=alpha,
+                error_beta=beta,
+                sample_count=svc_metrics.latency.sample_count if svc_metrics else 0,
+            )
+
+    def _train_from_summary(self, services: list[ServiceMetrics]) -> None:
+        """
+        Analytical conjugate-style posterior from summary statistics.
+
+        For latency (LogNormal):
+            mu_service  = log(mean) - 0.5 * log(1 + (std/mean)^2)
+            sigma_service = sqrt(log(1 + (std/mean)^2))
+
+        For errors (Beta-Bernoulli with weak prior Beta(1,1)):
+            alpha = 1 + error_count
+            beta  = 1 + (request_count - error_count)
+        """
+        all_log_means: list[float] = []
+
+        for svc in services:
+            lat = svc.latency
+            mean_val = max(lat.mean, 0.01)
+            std_val = max(lat.std_dev, 0.01)
+
+            cv_sq = (std_val / mean_val) ** 2
+            mu_log = np.log(mean_val) - 0.5 * np.log(1 + cv_sq)
+            sigma_log = np.sqrt(np.log(1 + cv_sq))
+
+            all_log_means.append(mu_log)
+
+            alpha, beta = self._error_posterior_from_counts(
+                svc.error_count, svc.request_count
+            )
+
+            self.state.posteriors[svc.service_name] = ServicePosterior(
+                mu=float(mu_log),
+                sigma=float(sigma_log),
+                error_alpha=alpha,
+                error_beta=beta,
+                sample_count=lat.sample_count,
+            )
+
+        if all_log_means:
+            self.state.global_mu = float(np.mean(all_log_means))
+            self.state.global_sigma = float(np.std(all_log_means)) if len(all_log_means) > 1 else 1.0
+
+    def _error_posterior(self, svc: Optional[ServiceMetrics]) -> tuple[float, float]:
+        if svc is None:
+            return 1.0, 1.0
+        return self._error_posterior_from_counts(svc.error_count, svc.request_count)
+
+    @staticmethod
+    def _error_posterior_from_counts(errors: int, total: int) -> tuple[float, float]:
+        """Beta posterior with uniform prior Beta(1,1)."""
+        return 1.0 + errors, 1.0 + max(total - errors, 0)
+
+    def _incorporate_dependency_priors(self, graph: DependencyGraph) -> None:
+        """
+        Adjust posteriors based on dependency graph.
+
+        If a downstream service has high error/latency, propagate
+        increased uncertainty to upstream services.
+        """
+        children_of: dict[str, list[str]] = {}
+        for edge in graph.edges:
+            children_of.setdefault(edge.parent, []).append(edge.child)
+
+        for parent, children in children_of.items():
+            if parent not in self.state.posteriors:
+                continue
+            parent_post = self.state.posteriors[parent]
+
+            child_sigmas: list[float] = []
+            child_error_rates: list[float] = []
+            for child in children:
+                if child in self.state.posteriors:
+                    cp = self.state.posteriors[child]
+                    child_sigmas.append(cp.sigma)
+                    child_error_rates.append(
+                        cp.error_alpha / (cp.error_alpha + cp.error_beta)
+                    )
+
+            if child_sigmas:
+                # Widen parent sigma by max downstream uncertainty (dampened)
+                max_child_sigma = max(child_sigmas)
+                parent_post.sigma = np.sqrt(
+                    parent_post.sigma ** 2 + 0.25 * max_child_sigma ** 2
+                )
+
+            if child_error_rates:
+                # Shift parent error prior toward higher error if children are failing
+                max_child_err = max(child_error_rates)
+                if max_child_err > 0.1:
+                    parent_post.error_alpha += max_child_err * 2
+
+    # ─── Inference ───────────────────────────────────────────────────────
+
+    def infer(
+        self,
+        services: list[ServiceMetrics],
+        dependency_graph: DependencyGraph,
+        time_windows: Optional[list[TimeWindow]] = None,
+    ) -> InferResponse:
+        """
+        Produce anomaly probabilities and root cause rankings
+        from current observations against trained posteriors.
+        """
+        start = time.time()
+        results: list[ServiceInference] = []
+
+        # Build adjacency for root-cause propagation
+        parents_of: dict[str, list[str]] = {}
+        for edge in dependency_graph.edges:
+            parents_of.setdefault(edge.child, []).append(edge.parent)
+
+        children_of: dict[str, list[str]] = {}
+        for edge in dependency_graph.edges:
+            children_of.setdefault(edge.parent, []).append(edge.child)
+
+        # Per-service anomaly scores
+        anomaly_scores: dict[str, float] = {}
+        error_scores: dict[str, float] = {}
+
+        for svc in services:
+            lat_prob = self._latency_anomaly_probability(svc)
+            err_prob = self._error_anomaly_probability(svc)
+            anomaly_scores[svc.service_name] = lat_prob
+            error_scores[svc.service_name] = err_prob
+
+        # Incorporate time-window trends
+        trend_multipliers = self._compute_trend_multipliers(time_windows) if time_windows else {}
+
+        for svc in services:
+            name = svc.service_name
+            lat_prob = anomaly_scores.get(name, 0.0)
+            err_prob = error_scores.get(name, 0.0)
+
+            # Apply trend multiplier
+            if name in trend_multipliers:
+                lat_prob = min(1.0, lat_prob * trend_multipliers[name])
+
+            # Rank root causes: look at downstream dependencies
+            root_causes = self._rank_root_causes(
+                name, children_of, anomaly_scores, error_scores, services
+            )
+
+            # Confidence based on sample count and model state
+            posterior = self.state.posteriors.get(name)
+            confidence = self._compute_confidence(posterior, svc)
+
+            results.append(
+                ServiceInference(
+                    service=name,
+                    latency_anomaly_probability=round(lat_prob, 4),
+                    error_anomaly_probability=round(err_prob, 4),
+                    likely_root_causes=root_causes,
+                    confidence=round(confidence, 4),
+                    posterior_latency_mean=round(posterior.mu, 4) if posterior else None,
+                    posterior_latency_std=round(posterior.sigma, 4) if posterior else None,
+                    posterior_error_rate=round(
+                        posterior.error_alpha / (posterior.error_alpha + posterior.error_beta), 4
+                    ) if posterior else None,
+                )
+            )
+
+        elapsed_ms = (time.time() - start) * 1000
+
+        return InferResponse(
+            results=results,
+            model_trained=self.state.trained,
+            inference_time_ms=round(elapsed_ms, 2),
+        )
+
+    def _latency_anomaly_probability(self, svc: ServiceMetrics) -> float:
+        """
+        P(anomaly | observed_latency) using the LogNormal posterior.
+
+        Computes the probability that the observed mean latency exceeds
+        the posterior predictive distribution's 95th percentile.
+        """
+        posterior = self.state.posteriors.get(svc.service_name)
+        if not posterior:
+            return self._fallback_latency_score(svc)
+
+        observed_mean = max(svc.latency.mean, 0.01)
+        log_obs = np.log(observed_mean)
+
+        # Z-score in log-space against posterior
+        if posterior.sigma < 0.001:
+            return 0.0
+
+        z = (log_obs - posterior.mu) / posterior.sigma
+
+        # Convert to probability using sigmoid for smooth [0,1] mapping
+        # z > 2 means observed is well above posterior expectation
+        # Clip exponent to prevent numpy overflow
+        exponent = np.clip(-1.5 * (z - 1.5), -700, 700)
+        prob = float(1.0 / (1.0 + np.exp(exponent)))
+        return min(1.0, max(0.0, prob))
+
+    def _error_anomaly_probability(self, svc: ServiceMetrics) -> float:
+        """
+        P(error_rate_anomalous) using Beta posterior.
+
+        Compares observed error rate against the posterior Beta
+        distribution's expected value and spread.
+        """
+        posterior = self.state.posteriors.get(svc.service_name)
+        if not posterior:
+            return min(1.0, svc.error_rate * 5)  # crude fallback
+
+        expected_rate = posterior.error_alpha / (posterior.error_alpha + posterior.error_beta)
+        total = posterior.error_alpha + posterior.error_beta
+
+        if total < 2.1:
+            # Weak prior — rely more on observed
+            return min(1.0, svc.error_rate * 3)
+
+        # Compute how extreme the observed rate is vs posterior
+        variance = (posterior.error_alpha * posterior.error_beta) / (
+            total ** 2 * (total + 1)
+        )
+        std = np.sqrt(variance) if variance > 0 else 0.01
+
+        if std < 0.0001:
+            return 1.0 if svc.error_rate > expected_rate + 0.05 else 0.0
+
+        z = (svc.error_rate - expected_rate) / std
+        exponent = np.clip(-1.0 * (z - 2.0), -700, 700)
+        prob = float(1.0 / (1.0 + np.exp(exponent)))
+        return min(1.0, max(0.0, prob))
+
+    def _fallback_latency_score(self, svc: ServiceMetrics) -> float:
+        """Heuristic score when no posterior is available."""
+        if svc.latency.std_dev < 0.01:
+            return 0.0
+        z = (svc.latency.mean - svc.latency.p50) / max(svc.latency.std_dev, 0.01)
+        return min(1.0, max(0.0, z / 5.0))
+
+    def _rank_root_causes(
+        self,
+        service: str,
+        children_of: dict[str, list[str]],
+        anomaly_scores: dict[str, float],
+        error_scores: dict[str, float],
+        services: list[ServiceMetrics],
+    ) -> list[RootCause]:
+        """
+        Rank downstream services as likely root causes.
+
+        A downstream service is a likely root cause if:
+        1. It has a high anomaly score
+        2. It has a high error rate
+        3. It is in the dependency path of the current service
+        """
+        children = children_of.get(service, [])
+        if not children:
+            # Self is the leaf — if anomalous, self is root cause
+            self_score = anomaly_scores.get(service, 0.0)
+            if self_score > 0.3:
+                return [
+                    RootCause(
+                        service=service,
+                        probability=round(self_score, 4),
+                        evidence="Leaf service with elevated latency",
+                    )
+                ]
+            return []
+
+        candidates: list[RootCause] = []
+
+        for child in children:
+            lat_score = anomaly_scores.get(child, 0.0)
+            err_score = error_scores.get(child, 0.0)
+
+            # Combined score: weighted average
+            combined = 0.6 * lat_score + 0.4 * err_score
+            if combined < 0.1:
+                continue
+
+            # Build evidence string
+            svc_metrics = next((s for s in services if s.service_name == child), None)
+            evidence_parts: list[str] = []
+            if lat_score > 0.3:
+                evidence_parts.append(f"latency_anomaly={lat_score:.2f}")
+            if err_score > 0.3:
+                evidence_parts.append(f"error_anomaly={err_score:.2f}")
+            if svc_metrics:
+                evidence_parts.append(f"p99={svc_metrics.latency.p99:.1f}ms")
+                if svc_metrics.error_rate > 0.01:
+                    evidence_parts.append(f"err_rate={svc_metrics.error_rate:.1%}")
+
+            # Recurse one level: check if child's children are the actual root cause
+            grandchild_scores: list[float] = []
+            for grandchild in children_of.get(child, []):
+                gc_score = anomaly_scores.get(grandchild, 0.0)
+                if gc_score > combined:
+                    grandchild_scores.append(gc_score)
+
+            # If grandchild is more anomalous, dampen child's score
+            if grandchild_scores:
+                combined *= 0.7
+
+            candidates.append(
+                RootCause(
+                    service=child,
+                    probability=round(min(1.0, combined), 4),
+                    evidence="; ".join(evidence_parts) if evidence_parts else "downstream dependency",
+                )
+            )
+
+        # Sort by probability descending, limit to top 5
+        candidates.sort(key=lambda x: x.probability, reverse=True)
+        return candidates[:5]
+
+    def _compute_trend_multipliers(
+        self, time_windows: list[TimeWindow]
+    ) -> dict[str, float]:
+        """
+        Detect worsening trends across time windows.
+
+        If a service's latency is increasing across windows (5m > 15m > 1h),
+        that amplifies the anomaly probability.
+        """
+        # Group by service, ordered by window size (smallest first)
+        svc_window_means: dict[str, list[tuple[str, float]]] = {}
+
+        sorted_windows = sorted(time_windows, key=lambda w: w.end_epoch_ms - w.start_epoch_ms)
+        for window in sorted_windows:
+            for svc in window.services:
+                svc_window_means.setdefault(svc.service_name, []).append(
+                    (window.window_name, svc.latency.mean)
+                )
+
+        multipliers: dict[str, float] = {}
+        for name, windows in svc_window_means.items():
+            if len(windows) < 2:
+                continue
+            # Check if mean is monotonically increasing (worsening)
+            means = [m for _, m in windows]
+            increasing_count = sum(
+                1 for i in range(1, len(means)) if means[i] > means[i - 1] * 1.1
+            )
+            if increasing_count >= len(means) - 1:
+                multipliers[name] = 1.3  # 30% boost for worsening trend
+            elif increasing_count > 0:
+                multipliers[name] = 1.1  # 10% boost for partial trend
+
+        return multipliers
+
+    @staticmethod
+    def _compute_confidence(
+        posterior: Optional[ServicePosterior], svc: ServiceMetrics
+    ) -> float:
+        """
+        Confidence score [0, 1] based on data quality.
+
+        Higher when:
+        - More training samples
+        - Tighter posterior (low sigma)
+        - Current observation has reasonable sample count
+        """
+        if posterior is None:
+            return 0.3  # Low confidence without posterior
+
+        # Sample count factor: saturates around 1000 samples
+        sample_factor = min(1.0, posterior.sample_count / 1000)
+
+        # Precision factor: tighter posterior = higher confidence
+        precision_factor = 1.0 / (1.0 + posterior.sigma)
+
+        # Current data factor
+        current_factor = min(1.0, svc.latency.sample_count / 50)
+
+        confidence = 0.4 * sample_factor + 0.35 * precision_factor + 0.25 * current_factor
+        return min(1.0, max(0.1, confidence))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ALERT CORRELATION ENGINE — Noisy-OR Bayesian Network for Alert RCA
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _alert_key(alertname: str, service: str) -> str:
+    """Canonical key for an alert type: 'alertname:service'."""
+    return f"{alertname}:{service}" if service else alertname
+
+
+@dataclass
+class AlertCorrelationState:
+    """Learned co-occurrence and temporal ordering statistics."""
+
+    # How many times alert_key was the root cause of an incident
+    root_cause_counts: dict[str, int] = field(default_factory=dict)
+    # Co-occurrence: (root_cause_key, symptom_key) → count
+    co_occurrence: dict[tuple[str, str], int] = field(default_factory=dict)
+    # Temporal: (earlier_key, later_key) → count of times earlier fired first
+    temporal_order: dict[tuple[str, str], int] = field(default_factory=dict)
+    # Total incidents learned
+    total_incidents: int = 0
+    # All known alert keys
+    known_alerts: set[str] = field(default_factory=set)
+    # Leak probability — chance an alert fires spontaneously (false positive)
+    leak_prob: float = 0.05
+
+
+class AlertCorrelationEngine:
+    """
+    Noisy-OR Bayesian Network for alert storm root cause analysis.
+
+    Given historical incidents (clusters of co-occurring alerts), learns:
+      1. Co-occurrence probabilities: P(symptom_alert | root_cause_alert)
+      2. Temporal ordering: which alert tends to fire first
+      3. Root cause priors: how often each alert type is the root cause
+
+    Inference uses Bayes' rule with Noisy-OR likelihood to rank the most
+    probable root cause given a set of currently-firing alerts.
+    """
+
+    def __init__(self) -> None:
+        self.state = AlertCorrelationState()
+
+    @property
+    def incidents_learned(self) -> int:
+        return self.state.total_incidents
+
+    # ─── Training ────────────────────────────────────────────────────────
+
+    def train(
+        self,
+        incidents: list,
+    ) -> dict:
+        """
+        Learn co-occurrence and temporal patterns from historical incidents.
+
+        For each incident:
+          - If root_cause_alert is labeled, use it directly.
+          - Otherwise, the earliest-firing alert is the presumed root cause.
+        """
+        start = time.monotonic()
+
+        for incident in incidents:
+            alerts = incident.alerts
+            if len(alerts) < 1:
+                continue
+
+            # Sort alerts by firing time
+            sorted_alerts = sorted(alerts, key=lambda a: a.fired_at)
+            alert_keys = [_alert_key(a.alertname, a.service) for a in sorted_alerts]
+
+            # Register all alert keys
+            for k in alert_keys:
+                self.state.known_alerts.add(k)
+
+            # Determine root cause
+            if incident.root_cause_alert and incident.root_cause_alert in alert_keys:
+                rc_key = incident.root_cause_alert
+            else:
+                rc_key = alert_keys[0]  # earliest-firing = presumed root cause
+
+            # Update root cause counts
+            self.state.root_cause_counts[rc_key] = (
+                self.state.root_cause_counts.get(rc_key, 0) + 1
+            )
+
+            # Update co-occurrence: root_cause → each symptom
+            unique_keys = set(alert_keys)
+            for symptom_key in unique_keys:
+                if symptom_key != rc_key:
+                    pair = (rc_key, symptom_key)
+                    self.state.co_occurrence[pair] = (
+                        self.state.co_occurrence.get(pair, 0) + 1
+                    )
+
+            # Update temporal ordering for all pairs
+            for i, key_a in enumerate(alert_keys):
+                for key_b in alert_keys[i + 1:]:
+                    if key_a != key_b:
+                        pair = (key_a, key_b)
+                        self.state.temporal_order[pair] = (
+                            self.state.temporal_order.get(pair, 0) + 1
+                        )
+
+            self.state.total_incidents += 1
+
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logger.info(
+            "Alert correlation trained: %d incidents, %d alert types, %.1fms",
+            self.state.total_incidents,
+            len(self.state.known_alerts),
+            elapsed_ms,
+        )
+
+        return {
+            "incidents_learned": self.state.total_incidents,
+            "unique_alert_types": len(self.state.known_alerts),
+            "co_occurrence_pairs": len(self.state.co_occurrence),
+            "training_time_ms": elapsed_ms,
+        }
+
+    # ─── Inference ───────────────────────────────────────────────────────
+
+    def infer(self, alerts: list) -> list[dict]:
+        """
+        Given a set of currently-firing alerts, rank them by probability
+        of being the root cause.
+
+        Uses Noisy-OR Bayesian model:
+          P(c is root cause | firing alerts A) ∝
+            P_prior(c) × ∏_{a ∈ A, a≠c} P(a fires | c is root cause)
+
+        Where:
+          - P_prior(c): Historical frequency + temporal ordering bonus
+          - P(a | c): Learned co-occurrence probability (Noisy-OR)
+          - Leak probability handles never-seen-together pairs
+        """
+        start = time.monotonic()
+
+        sorted_alerts = sorted(alerts, key=lambda a: a.fired_at)
+        alert_keys = [_alert_key(a.alertname, a.service) for a in sorted_alerts]
+        unique_keys = list(dict.fromkeys(alert_keys))  # preserve order, deduplicate
+
+        # Build alert_key → trace_id mapping (first non-null trace_id wins)
+        key_to_trace_id: dict[str, str | None] = {}
+        for a in sorted_alerts:
+            k = _alert_key(a.alertname, a.service)
+            if k not in key_to_trace_id:
+                key_to_trace_id[k] = getattr(a, "trace_id", None)
+
+        if len(unique_keys) == 1:
+            # Single alert — it's trivially the root cause
+            k = unique_keys[0]
+            parts = k.split(":", 1)
+            return [{
+                "alert_key": k,
+                "alertname": parts[0],
+                "service": parts[1] if len(parts) > 1 else "",
+                "probability": 1.0,
+                "evidence": "Only alert firing",
+                "trace_id": key_to_trace_id.get(k),
+            }]
+
+        # Compute unnormalized log-posterior for each candidate root cause
+        log_scores: dict[str, float] = {}
+
+        for idx, candidate in enumerate(unique_keys):
+            # 1. Prior: historical root cause frequency + temporal bonus
+            rc_count = self.state.root_cause_counts.get(candidate, 0)
+            total = max(self.state.total_incidents, 1)
+            # Laplace-smoothed prior
+            prior = (rc_count + 1) / (total + len(unique_keys))
+
+            # Temporal bonus: if this alert fired first, boost prior
+            temporal_bonus = 1.0
+            if idx == 0:
+                temporal_bonus = 2.0  # first-to-fire gets 2× prior
+            elif idx == 1:
+                temporal_bonus = 1.3  # second gets mild boost
+
+            log_prior = np.log(prior * temporal_bonus)
+
+            # 2. Noisy-OR likelihood: P(each other alert | candidate is root cause)
+            log_likelihood = 0.0
+            for other in unique_keys:
+                if other == candidate:
+                    continue
+
+                pair = (candidate, other)
+                co_count = self.state.co_occurrence.get(pair, 0)
+
+                if rc_count > 0:
+                    # Learned co-occurrence probability
+                    p_symptom = (co_count + 0.5) / (rc_count + 1.0)
+                else:
+                    # Never seen as root cause — use leak probability
+                    p_symptom = self.state.leak_prob
+
+                # Clamp to avoid log(0)
+                p_symptom = max(p_symptom, 0.01)
+                log_likelihood += np.log(p_symptom)
+
+            log_scores[candidate] = float(log_prior + log_likelihood)
+
+        # Normalize to probabilities via log-sum-exp
+        keys = list(log_scores.keys())
+        values = np.array([log_scores[k] for k in keys])
+        values -= values.max()  # numerical stability
+        exp_values = np.exp(values)
+        probs = exp_values / exp_values.sum()
+
+        # Build ranked results
+        results = []
+        for k, p in zip(keys, probs):
+            parts = k.split(":", 1)
+            evidence = self._build_evidence(k, unique_keys)
+            results.append({
+                "alert_key": k,
+                "alertname": parts[0],
+                "service": parts[1] if len(parts) > 1 else "",
+                "probability": round(float(p), 4),
+                "evidence": evidence,
+                "trace_id": key_to_trace_id.get(k),
+            })
+
+        results.sort(key=lambda r: r["probability"], reverse=True)
+
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logger.info(
+            "Alert RCA inference: %d alerts, top cause=%s (%.1f%%), %.1fms",
+            len(unique_keys),
+            results[0]["alert_key"] if results else "none",
+            results[0]["probability"] * 100 if results else 0,
+            elapsed_ms,
+        )
+
+        return results
+
+    def _build_evidence(self, candidate: str, all_keys: list[str]) -> str:
+        """Human-readable evidence for why this alert might be root cause."""
+        parts = []
+
+        # Historical frequency
+        rc_count = self.state.root_cause_counts.get(candidate, 0)
+        if rc_count > 0:
+            parts.append(f"Root cause in {rc_count} prior incident(s)")
+
+        # Temporal ordering
+        first_count = 0
+        for other in all_keys:
+            if other == candidate:
+                continue
+            pair = (candidate, other)
+            first_count += self.state.temporal_order.get(pair, 0)
+        if first_count > 0:
+            parts.append(f"Fired first {first_count} time(s) vs co-occurring alerts")
+
+        # Co-occurrence strength
+        co_count = 0
+        for other in all_keys:
+            if other == candidate:
+                continue
+            co_count += self.state.co_occurrence.get((candidate, other), 0)
+        if co_count > 0:
+            parts.append(f"Co-occurred with {len(all_keys)-1} current alert(s) {co_count} time(s)")
+
+        if not parts:
+            parts.append("No prior history — ranked by temporal ordering")
+
+        return "; ".join(parts)

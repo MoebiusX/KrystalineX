@@ -1,4 +1,5 @@
 import * as amqp from 'amqplib';
+import { randomUUID } from 'crypto';
 import { trace, context, SpanStatusCode, SpanKind, propagation } from '@opentelemetry/api';
 import { config } from '../config';
 import { createLogger } from '../lib/logger';
@@ -42,6 +43,7 @@ export class RabbitMQClient {
   private readonly RESPONSE_QUEUE: string;
   private readonly LEGACY_QUEUE: string;
   private readonly LEGACY_RESPONSE: string;
+  private replyQueue: string | null = null;
   private tracer;
 
   private pendingResponses: Map<string, ResponseCallback> = new Map();
@@ -78,8 +80,23 @@ export class RabbitMQClient {
       await this.channel.assertQueue(this.LEGACY_QUEUE, { durable: true });
       await this.channel.assertQueue(this.LEGACY_RESPONSE, { durable: true });
 
+      // Create exclusive per-instance reply queue for multi-replica support.
+      // When multiple server replicas share the durable payment_response queue,
+      // RabbitMQ round-robins responses — the replica that sent the order may
+      // not receive its own reply, causing a 5s timeout. This exclusive queue
+      // ensures responses are routed back to the correct replica.
+      const instanceId = randomUUID().slice(0, 8);
+      const { queue } = await this.channel.assertQueue('', {
+        exclusive: true,
+        autoDelete: true,
+        durable: false,
+      });
+      this.replyQueue = queue;
+
       logger.info({
         queues: [this.ORDERS_QUEUE, this.RESPONSE_QUEUE, this.LEGACY_QUEUE, this.LEGACY_RESPONSE],
+        replyQueue: this.replyQueue,
+        instanceId,
       }, 'RabbitMQ connected successfully');
 
       // Set initial circuit breaker state and start queue depth polling
@@ -184,6 +201,7 @@ export class RabbitMQClient {
             {
               persistent: true,
               correlationId: correlationId,
+              replyTo: this.replyQueue || undefined,
               headers: {
                 ...publishHeaders,
                 'x-correlation-id': correlationId,
@@ -257,8 +275,7 @@ export class RabbitMQClient {
 
     logger.info('Starting order response consumer...');
 
-    // Listen on legacy response queue
-    await this.channel.consume(this.LEGACY_RESPONSE, (msg) => {
+    const handleMessage = (msg: amqp.ConsumeMessage | null) => {
       if (msg) {
         try {
           const response = JSON.parse(msg.content.toString());
@@ -305,9 +322,19 @@ export class RabbitMQClient {
           this.channel!.nack(msg, false, false);
         }
       }
-    });
+    };
 
-    logger.info(`Consumer started - listening on ${this.LEGACY_RESPONSE}`);
+    // Primary: consume from exclusive per-instance reply queue
+    if (this.replyQueue) {
+      await this.channel.consume(this.replyQueue, handleMessage);
+      logger.info(`Consumer started - listening on exclusive reply queue ${this.replyQueue}`);
+    }
+
+    // Fallback: also consume from shared legacy queue for backward compat
+    // (handles responses from older matcher versions that don't use replyTo)
+    await this.channel.consume(this.LEGACY_RESPONSE, handleMessage);
+
+    logger.info(`Consumer started - also listening on shared ${this.LEGACY_RESPONSE}`);
   }
 
   async disconnect(): Promise<void> {

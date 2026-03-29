@@ -144,6 +144,7 @@ app.use(createUserContextMiddleware());
 
   // Register public transparency routes (unauthenticated)
   app.use('/api/v1/public', publicRoutes);
+  app.use('/api/public', publicRoutes);
 
   // Start trace monitoring services (polls Jaeger for baselines/anomalies)
   startMonitor();

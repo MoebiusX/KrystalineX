@@ -27,7 +27,8 @@
     "llm-tools"
   ],
   "bin": {
-    "otel-mcp-server": "dist/index.js"
+    "otel-mcp-server": "dist/index.js",
+    "otel-mcp-client": "dist/client.js"
   },
   "main": "dist/index.js",
   "files": [
@@ -39,6 +40,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "start:http": "node dist/index.js --http 3001",
+    "client": "node dist/client.js",
+    "client:dev": "tsx src/client.ts",
     "dev": "tsx src/index.ts",
     "dev:http": "tsx src/index.ts --http 3001",
     "lint": "tsc --noEmit",

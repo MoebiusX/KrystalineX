@@ -57,6 +57,7 @@ export const generalRateLimiter = rateLimit({
   max: RATE_LIMIT_GENERAL,
   ...createRateLimitStore('general'),
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
+  validate: { keyGeneratorIpFallback: false },
   message: {
     error: 'Too many requests',
     message: 'Please try again in a minute',
@@ -91,6 +92,7 @@ export const authRateLimiter = rateLimit({
   max: RATE_LIMIT_AUTH,
   ...createRateLimitStore('auth'),
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
+  validate: { keyGeneratorIpFallback: false },
   message: {
     error: 'Too many authentication attempts',
     message: 'Please try again in a minute',
@@ -125,6 +127,7 @@ export const sensitiveRateLimiter = rateLimit({
   max: RATE_LIMIT_SENSITIVE,
   ...createRateLimitStore('sensitive'),
   keyGenerator: (req: Request) => req.headers.authorization || req.ip || 'unknown',
+  validate: { keyGeneratorIpFallback: false },
   message: {
     error: 'Too many attempts',
     message: 'Please wait before trying again',
