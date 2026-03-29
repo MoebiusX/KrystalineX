@@ -6,20 +6,16 @@ global:
   imagePullSecrets: []
   storageClass: "local-storage"
 
-# Enable secret creation (for local dev)
-secrets:
-  create: true
-
 # =============================================================================
 # CORE APPLICATION SERVICES
 # =============================================================================
 
 server:
   enabled: true
-  replicaCount: 3
+  replicaCount: 1
   image:
     repository: moebiusx/krystalinex-server
-    tag: v2.6.4
+    tag: v2.6.9
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -89,7 +85,7 @@ paymentProcessor:
 
 frontend:
   enabled: true
-  replicaCount: 2
+  replicaCount: 1
   image:
     repository: moebiusx/krystalinex-frontend
     tag: v2.1.25
@@ -359,7 +355,7 @@ otelMcpServer:
   enabled: true
   image:
     repository: moebiusx/otel-mcp-server
-    tag: v1.2.0
+    tag: v1.4.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
