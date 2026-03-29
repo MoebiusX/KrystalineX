@@ -126,3 +126,59 @@ export interface BayesianInsight {
     confidence: number;
     timestamp: Date;
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ALERT CORRELATION — Root Cause Analysis from Alert Storms
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface AlertRecord {
+    alertname: string;
+    service: string;
+    severity: string;
+    fired_at: number;
+    resolved_at: number | null;
+    labels: Record<string, string>;
+    fingerprint: string;
+    trace_id: string | null;
+}
+
+export interface AlertIncident {
+    id: string;
+    alerts: AlertRecord[];
+    root_cause_alert: string | null;
+    started_at: number;
+    ended_at: number | null;
+}
+
+export interface TrainAlertsRequest {
+    incidents: AlertIncident[];
+}
+
+export interface TrainAlertsResponse {
+    status: string;
+    incidents_learned: number;
+    unique_alert_types: number;
+    co_occurrence_pairs: number;
+    message: string;
+}
+
+export interface AlertRootCause {
+    alert_key: string;
+    alertname: string;
+    service: string;
+    probability: number;
+    evidence: string;
+    trace_id: string | null;
+}
+
+export interface InferAlertsRequest {
+    alerts: AlertRecord[];
+}
+
+export interface InferAlertsResponse {
+    probable_root_causes: AlertRootCause[];
+    incident_size: number;
+    model_incidents_learned: number;
+    inference_time_ms: number;
+}

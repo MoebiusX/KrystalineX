@@ -11,6 +11,10 @@ import type {
     InferRequest,
     InferResponse,
     BayesianHealthResponse,
+    TrainAlertsRequest,
+    TrainAlertsResponse,
+    InferAlertsRequest,
+    InferAlertsResponse,
 } from './types';
 import { createLogger } from '../lib/logger';
 import { config } from '../config';
@@ -70,6 +74,20 @@ export class BayesianClient {
      */
     async infer(data: InferRequest): Promise<InferResponse> {
         return this.request<InferResponse>('POST', '/infer', data);
+    }
+
+    /**
+     * POST /train-alerts — Train alert correlation model from historical incidents
+     */
+    async trainAlerts(data: TrainAlertsRequest): Promise<TrainAlertsResponse> {
+        return this.request<TrainAlertsResponse>('POST', '/train-alerts', data);
+    }
+
+    /**
+     * POST /infer-alerts — Get root cause ranking for currently-firing alerts
+     */
+    async inferAlerts(data: InferAlertsRequest): Promise<InferAlertsResponse> {
+        return this.request<InferAlertsResponse>('POST', '/infer-alerts', data);
     }
 
     // ─── Internal ───────────────────────────────────────────────────────

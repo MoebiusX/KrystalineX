@@ -7,6 +7,12 @@
 export { bayesianClient, BayesianClient } from './client';
 export { bayesianInference, BayesianInference } from './inference';
 export { extractFeatures, extractFeaturesFromBaselines } from './feature-extractor';
+export {
+    fetchAlertmanagerAlerts,
+    clusterAlertsIntoIncidents,
+    extractAlertIncidents,
+    getCurrentlyFiringAlerts,
+} from './alert-extractor';
 export type {
     BayesianInsight,
     ServiceInference,
@@ -17,4 +23,9 @@ export type {
     ServiceMetrics,
     BayesianDependencyGraph,
     TimeWindow,
+    AlertRecord,
+    AlertIncident,
+    AlertRootCause,
+    TrainAlertsResponse,
+    InferAlertsResponse,
 } from './types';
