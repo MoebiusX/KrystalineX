@@ -120,13 +120,14 @@ Observations:
 bayesian-service/           # Python microservice
 ├── app/
 │   ├── main.py             # FastAPI endpoints + Prometheus metrics
-│   ├── models.py           # BayesianInferenceEngine (PyMC + conjugate)
+│   ├── models.py           # BayesianInferenceEngine + AlertCorrelationEngine
 │   └── schemas.py          # Pydantic request/response schemas
 ├── Dockerfile
 ├── requirements.txt
 └── README.md
 
 server/bayesian/            # TypeScript integration
+├── alert-extractor.ts      # Alertmanager fetch, exemplar enrichment, clustering
 ├── client.ts               # HTTP client with health caching
 ├── feature-extractor.ts    # OTEL traces → structured features
 ├── inference.ts            # Orchestrator (train every 15m, infer every 60s)
@@ -145,6 +146,78 @@ docker compose up -d bayesian-service
 curl http://localhost:8100/health
 curl http://localhost:8100/metrics
 ```
+
+## Alert Storm RCA (Root Cause Analysis)
+
+A separate model for analyzing alert storms — when multiple alerts fire during an incident,
+the system learns which alert is the **harbinger** (root cause) vs. cascading symptoms.
+
+### How It Works
+
+1. **Training**: Feed historical alert incidents (co-occurring alerts + labeled root cause)
+2. **Learning**: Builds a Noisy-OR Bayesian Network from co-occurrence patterns and temporal ordering
+3. **Inference**: Given currently-firing alerts, ranks probable root causes by posterior probability
+
+### Noisy-OR Model
+
+For each candidate root cause `c` given observed alerts:
+
+```
+P(c | alerts) ∝ P_prior(c) × ∏ P(symptom | c)
+```
+
+- **Prior**: Laplace-smoothed historical root cause frequency × temporal bonus (first-to-fire gets 2× weight)
+- **Likelihood**: `P(symptom | root_cause) = (co_count + 0.5) / (rc_count + 1.0)` (Laplace smoothed)
+- **Leak probability**: 0.05 for never-seen-together pairs
+
+### Exemplar Enrichment
+
+Alerts based on metrics with exemplars (e.g., `http_request_duration_seconds`) are enriched
+with the **traceId** of the request that triggered the alert, via the Prometheus exemplars API.
+
+```
+Alert fired → metric selector → Prometheus /api/v1/query_exemplars → traceId → trace context
+```
+
+This closes the loop: **alert → metric → exemplar → trace → root cause service**.
+
+### API Endpoints
+
+```bash
+# Train from historical alert incidents
+curl -X POST http://localhost:8100/train-alerts \
+  -H "Content-Type: application/json" \
+  -d '{"incidents": [...]}'
+
+# Infer root cause from current alerts
+curl -X POST http://localhost:8100/infer-alerts \
+  -H "Content-Type: application/json" \
+  -d '{"alerts": [...]}'
+```
+
+### Example Output
+
+```json
+{
+  "probable_root_causes": [
+    {
+      "alert_key": "HighLatencyP99:krystalinex",
+      "alertname": "HighLatencyP99",
+      "service": "krystalinex",
+      "probability": 0.9986,
+      "evidence": "Root cause in 2 prior incident(s); Fired first 4 time(s)",
+      "trace_id": "abc123def456"
+    }
+  ],
+  "incident_size": 3,
+  "model_incidents_learned": 3
+}
+```
+
+### MCP Tools
+
+- `alert_rca` — Analyze currently-firing alerts to identify probable root cause
+- `alert_rca_train` — Train the model from Alertmanager history
 
 ## Kubernetes
 
