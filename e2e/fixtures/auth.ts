@@ -193,9 +193,9 @@ export async function logout(page: Page) {
     if (await logoutButton.isVisible({ timeout: 2000 }).catch(() => false)) {
         await logoutButton.click();
 
-        // Wait for redirect to home page with timeout
-        // The app clears localStorage and navigates to /
-        await page.waitForURL('/', { timeout: 10000 });
+        // Wait for redirect to login page with timeout
+        // The app clears localStorage and navigates to /login
+        await page.waitForURL(/\/(login)?$/, { timeout: 10000 });
     } else {
         // If no logout button, just navigate to home and clear storage
         await page.evaluate(() => localStorage.clear());
