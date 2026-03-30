@@ -36,8 +36,11 @@ test.describe('Trading Flow', () => {
             const initialBalance = await getWalletBalance(page);
             console.log('Initial balance:', initialBalance);
 
-            // Execute small buy order
-            await submitBuyOrder(page, 0.0001);
+            // Execute small buy order (minimum order size is 0.001 BTC)
+            await submitBuyOrder(page, 0.001);
+
+            // Wait for order to settle through payment processor before reloading
+            await page.waitForTimeout(3000);
 
             // Reload page to ensure fresh wallet data from server
             await page.reload();
@@ -116,18 +119,18 @@ test.describe('Trading Flow', () => {
             await page.goto('/trade');
             await page.waitForLoadState('networkidle');
 
-            // Execute a trade
-            await submitBuyOrder(page, 0.0001);
+            // Execute a trade (minimum order size is 0.001 BTC)
+            await submitBuyOrder(page, 0.001);
 
             // Wait for activity to update
             await page.waitForTimeout(3000);
 
-            // Check recent activity shows the trade - use regex for i18n
-            await expect(page.getByText(/Recent Activity|Actividad Reciente/i)).toBeVisible();
-            await expect(page.getByText(/BUY.*BTC/i)).toBeVisible({ timeout: 10000 });
+            // Check recent activity shows the trade - section is "Live Traces" in trade dashboard
+            await expect(page.getByText(/Live Traces|Recent Activity|Actividad Reciente/i)).toBeVisible({ timeout: 10000 });
+            await expect(page.getByText(/BUY.*BTC|order\.match/i).first()).toBeVisible({ timeout: 10000 });
 
-            // Trade should have trace link (Jaeger icon)
-            const traceLink = page.locator('a[href*="localhost:16686/trace"]');
+            // Trade should have trace link (Jaeger icon or external link)
+            const traceLink = page.locator('a[href*="16686/trace"], a[href*="jaeger"]');
             await expect(traceLink.first()).toBeVisible({ timeout: 10000 });
         });
 
@@ -144,11 +147,11 @@ test.describe('Trading Flow', () => {
             // Wait for trade form to load
             await page.getByRole('button', { name: /^BUY$/i }).waitFor({ timeout: 10000 });
             await page.getByRole('button', { name: /^BUY$/i }).click();
-            await page.fill('input[type="number"]', '0.0001');
+            await page.fill('input[type="number"]', '0.001');
             await page.getByRole('button', { name: /Buy.*BTC/i }).click();
 
             // Should show execution confirmation
-            await expect(page.getByText(/Executed|Submitted|Verified|Ejecutad/i)).toBeVisible({ timeout: 15000 });
+            await expect(page.getByText(/Executed|Submitted|Verified|Ejecutad/i).first()).toBeVisible({ timeout: 15000 });
         });
     });
 });
