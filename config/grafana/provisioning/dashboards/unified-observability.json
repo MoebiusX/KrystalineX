@@ -346,27 +346,27 @@
                 "value": 0
               },
               {
-                "color": "yellow",
-                "value": 1
+                "color": "orange",
+                "value": 0.1
               },
               {
                 "color": "red",
-                "value": 5
+                "value": 1
               }
             ]
           },
           "unit": "percent",
-          "noValue": "—"
+          "noValue": "0%"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 4,
-        "w": 8,
+        "w": 4,
         "x": 0,
         "y": 41
       },
-      "id": 13,
+      "id": 115,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
@@ -387,13 +387,83 @@
       "pluginVersion": "12.3.3",
       "targets": [
         {
-          "expr": "sum(rate(http_request_errors_total{method=~\"$method\",route=~\"$route\",status_code=~\"$status\"}[5m])) / sum(rate(http_requests_total{method=~\"$method\",route=~\"$route\",status_code=~\"$status\"}[5m])) * 100",
+          "expr": "(sum(rate(http_request_errors_total{method=~\"$method\",route=~\"$route\",status_code=~\"5..\"}[5m])) or vector(0)) / (sum(rate(http_requests_total{method=~\"$method\",route=~\"$route\",status_code=~\"$status\"}[5m])) > 0) * 100 or vector(0)",
           "refId": "A"
         }
       ],
-      "title": "Error Rate",
+      "title": "Server Errors (5xx)",
       "type": "stat",
-      "description": "Percentage of HTTP responses with 4xx/5xx status codes"
+      "description": "Percentage of HTTP responses with 5xx server error status codes — impacts Availability SLI"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "orange",
+                "value": 15
+              }
+            ]
+          },
+          "unit": "percent",
+          "noValue": "0%"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 41
+      },
+      "id": 116,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.3",
+      "targets": [
+        {
+          "expr": "(sum(rate(http_request_errors_total{method=~\"$method\",route=~\"$route\",status_code=~\"4..\"}[5m])) or vector(0)) / (sum(rate(http_requests_total{method=~\"$method\",route=~\"$route\",status_code=~\"$status\"}[5m])) > 0) * 100 or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Client Errors (4xx)",
+      "type": "stat",
+      "description": "Percentage of HTTP responses with 4xx client error status codes (auth failures, bad requests, not found)"
     },
     {
       "datasource": {
