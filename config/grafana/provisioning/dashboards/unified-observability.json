@@ -2954,7 +2954,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "1 - slo:http_requests:error_ratio_1h",
+          "expr": "slo:availability:composite_1h",
           "legendFormat": "Availability",
           "range": true,
           "refId": "A"

@@ -950,13 +950,43 @@ data:
             expr: |
               histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[1h])) by (le))
 
+      # ============================================
+      # PROBE-BASED AVAILABILITY
+      # Detects total outages that request-based SLI misses
+      # ============================================
+      - name: slo:probe_availability
+        interval: 30s
+        rules:
+          - record: slo:server:probe_success_ratio_5m
+            expr: |
+              max(avg_over_time(up{job="krystalinex-server"}[5m]))
+              or vector(0)
+          - record: slo:server:probe_success_ratio_1h
+            expr: |
+              max(avg_over_time(up{job="krystalinex-server"}[1h]))
+              or vector(0)
+          - record: slo:server:probe_success_ratio_1d
+            expr: |
+              max(avg_over_time(up{job="krystalinex-server"}[1d]))
+              or vector(0)
+          - record: slo:availability:composite_1h
+            expr: |
+              (1 - (slo:http_requests:error_ratio_1h or vector(0)))
+              *
+              (slo:server:probe_success_ratio_1h or vector(0))
+          - record: slo:availability:composite_1d
+            expr: |
+              (1 - (slo:http_requests:error_ratio_1d or vector(0)))
+              *
+              (slo:server:probe_success_ratio_1d or vector(0))
+
       - name: slo:error_budget
         interval: 1m
         rules:
           - record: slo:availability:error_budget_remaining
             expr: |
               1 - (
-                slo:http_requests:error_ratio_1d
+                (1 - (slo:availability:composite_1d or vector(1)))
                 / (1 - 0.999)
               )
           - record: slo:latency:error_budget_remaining
