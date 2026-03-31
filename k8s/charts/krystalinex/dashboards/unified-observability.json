@@ -1768,7 +1768,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/mnt\"} / node_filesystem_size_bytes{mountpoint=\"/mnt\"})) * 100",
+          "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})) * 100",
           "range": true,
           "refId": "A"
         }
@@ -4262,8 +4262,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "rabbitmq_queue_messages{queue=~\".+\"}",
-          "legendFormat": "{{queue}}",
+          "expr": "rabbitmq_queue_messages",
+          "legendFormat": "total",
           "range": true,
           "refId": "A"
         }
