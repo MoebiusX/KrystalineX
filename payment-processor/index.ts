@@ -70,6 +70,14 @@ const queueDepth = new Gauge({
     registers: [register]
 });
 
+// Initialize counters with zero values so they appear in /metrics immediately
+for (const side of ['BUY', 'SELL']) {
+    for (const status of ['filled', 'rejected']) {
+        ordersProcessedTotal.inc({ status, side }, 0);
+    }
+}
+queueDepth.set({ queue: 'payments' }, 0);
+
 // Start metrics HTTP server
 const metricsApp = express();
 const METRICS_PORT = parseInt(process.env.METRICS_PORT || '3001', 10);
