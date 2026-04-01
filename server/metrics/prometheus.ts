@@ -261,6 +261,43 @@ export function getMetricsRegistry(): Registry {
     return register;
 }
 
+// ============================================
+// Initialize counters with zero values so they
+// appear in /metrics before any events occur.
+// Without this, Prometheus sees "no data" for
+// panels querying unincremented counters.
+// ============================================
+function initializeCounters(): void {
+    // Orders
+    for (const side of ['BUY', 'SELL']) {
+        for (const status of ['filled', 'rejected', 'pending']) {
+            ordersProcessedTotal.inc({ status, side }, 0);
+        }
+    }
+
+    // Anomalies
+    for (const severity of ['SEV1', 'SEV2', 'SEV3', 'SEV4', 'SEV5']) {
+        anomaliesDetectedTotal.inc({ service: 'unknown', severity }, 0);
+    }
+
+    // Circuit breaker
+    circuitBreakerTripsTotal.inc({ service: 'rabbitmq', from_state: 'CLOSED', to_state: 'OPEN' }, 0);
+
+    // Business KPIs
+    for (const pair of ['BTC/USD', 'ETH/USD']) {
+        for (const side of ['BUY', 'SELL']) {
+            tradeVolumeTotal.inc({ pair, side }, 0);
+            tradeValueUsdTotal.inc({ pair, side }, 0);
+            tradesTotal.inc({ pair, side }, 0);
+        }
+    }
+
+    loginsTotal.inc({ status: 'success' }, 0);
+    loginsTotal.inc({ status: 'failure' }, 0);
+}
+
+initializeCounters();
+
 // Export helper to record order metrics
 export function recordOrderMetrics(side: string, status: string, durationSeconds: number): void {
     ordersProcessedTotal.inc({ status, side });

@@ -75,6 +75,19 @@ const MAX_QUEUE_SIZE = 100;
 // Initialize gauge to 0 so it appears in metrics immediately
 llmQueueDepth.set(0);
 
+// Initialize counters with zero values so they appear in /metrics
+for (const status of ['success', 'failure', 'timeout']) {
+    for (const useCase of ['latency_spike', 'error_burst', 'saturation', 'dependency_failure', 'general']) {
+        llmAnalysisTotal.inc({ status, use_case: useCase }, 0);
+    }
+}
+for (const severity of ['sev1', 'sev2', 'sev3', 'sev4', 'sev5']) {
+    llmEventsBySeverity.inc({ severity }, 0);
+}
+for (const reason of ['queue_full', 'llm_error', 'timeout']) {
+    llmDroppedEvents.inc({ reason }, 0);
+}
+
 // Use case detection patterns
 interface UseCase {
     id: string;
