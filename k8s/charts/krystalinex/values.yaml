@@ -192,6 +192,10 @@ goalert:
   persistence:
     enabled: true
     size: 5Gi
+  provision:
+    enabled: true
+    adminPassword: "REDACTED"
+    carlosPassword: "REDACTED"
 
 alertmanager:
   enabled: true

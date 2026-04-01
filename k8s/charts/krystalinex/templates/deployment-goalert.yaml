@@ -119,6 +119,25 @@ spec:
         - name: wait-for-db
           image: "postgres:17-alpine"
           command: ['sh', '-c', 'until pg_isready -h {{ include "krystalinex.fullname" . }}-goalert-db -p 5432 -U goalert; do echo waiting for goalert-db; sleep 2; done']
+        {{- if .Values.goalert.provision.enabled }}
+        - name: bootstrap-admin
+          image: "{{ .Values.goalert.image.repository }}:{{ .Values.goalert.image.tag }}"
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== GoAlert Bootstrap: creating admin user + enabling basic auth ==="
+              goalert add-user --admin --user admin --pass "$GOALERT_ADMIN_PASS" 2>&1 && echo "Admin user created" || echo "Admin user already exists (OK)"
+              goalert set-config --data '{"Auth.BasicEnable": true, "Webhook.Enable": true}' 2>&1 && echo "Config set" || echo "Config set failed"
+              echo "=== Bootstrap complete ==="
+          env:
+            - name: GOALERT_DB_URL
+              value: {{ printf "postgres://goalert:%s@%s-goalert-db:5432/goalert?sslmode=disable" (.Values.secrets.goalertDbPassword | default "CHANGE_ME") (include "krystalinex.fullname" .) | quote }}
+            - name: GOALERT_DATA_ENCRYPTION_KEY
+              value: {{ .Values.secrets.goalertEncryptionKey | default "CHANGE_ME_GENERATE_KEY" | quote }}
+            - name: GOALERT_ADMIN_PASS
+              value: {{ .Values.goalert.provision.adminPassword | default "REDACTED" | quote }}
+        {{- end }}
       containers:
         - name: goalert
           image: "{{ .Values.goalert.image.repository }}:{{ .Values.goalert.image.tag }}"
@@ -169,4 +188,114 @@ spec:
   selector:
     {{- include "krystalinex.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: goalert
+{{- if .Values.goalert.provision.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-goalert-provision
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: goalert-provision
+data:
+  provision.sh: |
+    #!/bin/sh
+    set -e
+    GOALERT_URL="http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert"
+    ADMIN_PASS="${GOALERT_ADMIN_PASS}"
+    CARLOS_PASS="${GOALERT_CARLOS_PASS}"
+
+    echo "=== GoAlert API Provisioning ==="
+
+    # Wait for GoAlert API
+    echo "Waiting for GoAlert at $GOALERT_URL..."
+    for i in $(seq 1 60); do
+      if wget -qO- "$GOALERT_URL/health" >/dev/null 2>&1; then
+        echo "GoAlert is healthy"
+        break
+      fi
+      [ "$i" -eq 60 ] && { echo "ERROR: GoAlert not reachable"; exit 1; }
+      sleep 3
+    done
+
+    # Authenticate
+    echo "Authenticating..."
+    COOKIE_FILE=$(mktemp)
+    LOGIN_CODE=$(wget -qO /dev/null --save-cookies "$COOKIE_FILE" --keep-session-cookies \
+      --post-data "username=admin&password=$ADMIN_PASS" \
+      --header "Referer: $GOALERT_URL" \
+      --header "Content-Type: application/x-www-form-urlencoded" \
+      "$GOALERT_URL/api/v2/identity/providers/basic" 2>&1 && echo "OK" || echo "FAIL")
+    [ "$LOGIN_CODE" = "FAIL" ] && { echo "ERROR: Auth failed"; exit 1; }
+    echo "Authenticated as admin"
+
+    # Helper: GraphQL query
+    gql() {
+      wget -qO- --load-cookies "$COOKIE_FILE" \
+        --header "Content-Type: application/json" \
+        --post-data "{\"query\":\"$1\"}" \
+        "$GOALERT_URL/api/graphql" 2>/dev/null
+    }
+
+    # Check/create carlos user
+    USERS=$(gql "{ users { nodes { id name } } }")
+    CARLOS_ID=$(echo "$USERS" | python3 -c "
+    import sys,json
+    users=json.load(sys.stdin).get('data',{}).get('users',{}).get('nodes',[])
+    c=[u for u in users if u.get('name')=='Carlos']
+    print(c[0]['id'] if c else 'NONE')
+    " 2>/dev/null || echo "NONE")
+
+    if [ "$CARLOS_ID" = "NONE" ]; then
+      RESULT=$(gql "mutation { createUser(input: { username: \\\"carlos\\\", password: \\\"$CARLOS_PASS\\\", name: \\\"Carlos\\\", email: \\\"carlos@krystaline.io\\\", role: admin }) { id name } }")
+      CARLOS_ID=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['createUser']['id'])" 2>/dev/null || echo "")
+      echo "Created carlos (ID: $CARLOS_ID)"
+    else
+      echo "Carlos already exists (ID: $CARLOS_ID)"
+    fi
+
+    ADMIN_ID=$(echo "$USERS" | python3 -c "
+    import sys,json
+    users=json.load(sys.stdin).get('data',{}).get('users',{}).get('nodes',[])
+    a=[u for u in users if u.get('name')=='admin']
+    print(a[0]['id'] if a else 'NONE')
+    " 2>/dev/null || echo "NONE")
+
+    # Check/create KrystalineX service
+    SVCS=$(gql "{ services { nodes { id name } } }")
+    SVC_ID=$(echo "$SVCS" | python3 -c "
+    import sys,json
+    svcs=json.load(sys.stdin).get('data',{}).get('services',{}).get('nodes',[])
+    kx=[s for s in svcs if s.get('name')=='KrystalineX']
+    print(kx[0]['id'] if kx else 'NONE')
+    " 2>/dev/null || echo "NONE")
+
+    if [ "$SVC_ID" = "NONE" ]; then
+      TARGETS="[{id: \\\"$ADMIN_ID\\\", type: user}"
+      [ "$CARLOS_ID" != "NONE" ] && [ -n "$CARLOS_ID" ] && TARGETS="$TARGETS, {id: \\\"$CARLOS_ID\\\", type: user}"
+      TARGETS="$TARGETS]"
+
+      RESULT=$(gql "mutation { createService(input: { name: \\\"KrystalineX\\\", description: \\\"KrystalineX Crypto Exchange - Observability Alerts\\\", newEscalationPolicy: { name: \\\"KrystalineX On-Call\\\", description: \\\"Primary escalation\\\", repeat: 3, steps: [{ delayMinutes: 5, targets: $TARGETS }] }, newIntegrationKeys: [{ type: prometheusAlertmanager, name: \\\"Alertmanager - General\\\" }, { type: prometheusAlertmanager, name: \\\"Alertmanager - Critical\\\" }, { type: generic, name: \\\"Alertmanager - Security\\\" }] }) { id name integrationKeys { id name type } } }")
+
+      echo "$RESULT" | python3 -c "
+    import sys,json
+    d=json.load(sys.stdin)['data']['createService']
+    print(f\"Created service: {d['name']} ({d['id']})\")
+    for ik in d.get('integrationKeys',[]):
+        print(f\"  {ik['name']:30s}  token={ik['id']}\")
+    print()
+    print('UPDATE values.yaml goalert.integrationTokens with these tokens!')
+    " 2>/dev/null
+    else
+      echo "KrystalineX service exists (ID: $SVC_ID)"
+      gql "{ service(id: \\\"$SVC_ID\\\") { integrationKeys { id name type } } }" | python3 -c "
+    import sys,json
+    for ik in json.load(sys.stdin)['data']['service'].get('integrationKeys',[]):
+        print(f\"  {ik['name']:30s}  token={ik['id']}\")
+    " 2>/dev/null
+    fi
+
+    rm -f "$COOKIE_FILE"
+    echo "=== Provisioning complete ==="
+{{- end }}
 {{- end }}
