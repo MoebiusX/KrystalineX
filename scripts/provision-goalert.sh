@@ -21,6 +21,7 @@
 #   TWILIO_ACCOUNT_SID       - Twilio Account SID (optional)
 #   TWILIO_AUTH_TOKEN         - Twilio Auth Token (optional)
 #   TWILIO_FROM_NUMBER        - Twilio phone number (optional)
+#   CARLOS_PHONE              - Carlos's phone number for SMS alerts (optional)
 
 set -euo pipefail
 
@@ -28,18 +29,34 @@ set -euo pipefail
 GOALERT_URL="${GOALERT_URL:-http://localhost:8081}"
 GOALERT_ADMIN_PASS="${GOALERT_ADMIN_PASS:-REDACTED}"
 GOALERT_CARLOS_PASS="${GOALERT_CARLOS_PASS:-REDACTED}"
-GOALERT_EXEC="${GOALERT_EXEC:-docker exec krystalinex-goalert-1 goalert}"
+GOALERT_EXEC="${GOALERT_EXEC:-}"
+# Set default GOALERT_EXEC if not provided
+if [ -z "$GOALERT_EXEC" ]; then
+  if docker info &>/dev/null; then
+    GOALERT_EXEC="docker exec krystalinex-goalert-1 goalert"
+  elif docker.exe info &>/dev/null; then
+    GOALERT_EXEC="docker.exe exec krystalinex-goalert-1 goalert"
+  fi
+fi
 
 # Handle --local shortcut
 MODE="${1:-}"
 if [ "$MODE" = "--local" ]; then
   GOALERT_URL="http://localhost:8081"
-  GOALERT_EXEC="docker exec krystalinex-goalert-1 goalert"
+  # Detect docker command (native docker or docker.exe for WSL)
+  if docker info &>/dev/null; then
+    GOALERT_EXEC="docker exec krystalinex-goalert-1 goalert"
+  elif docker.exe info &>/dev/null; then
+    GOALERT_EXEC="docker.exe exec krystalinex-goalert-1 goalert"
+  else
+    echo "ERROR: docker not accessible"
+    exit 1
+  fi
 fi
 
 # Detect working python command (Windows python3 stub may be a fake alias)
 PYTHON=""
-for cmd in python3 python; do
+for cmd in python3 python python3.exe python.exe; do
   if $cmd -c "print('ok')" &>/dev/null; then
     PYTHON="$cmd"
     break
@@ -80,7 +97,8 @@ gql() {
 
 jq_py() {
   # Lightweight JSON extraction using python (no jq dependency)
-  $PYTHON -c "import sys,json; d=json.load(sys.stdin); $1" 2>/dev/null
+  # tr -d '\r' strips Windows carriage returns from python.exe output
+  $PYTHON -c "import sys,json; d=json.load(sys.stdin); $1" 2>/dev/null | tr -d '\r'
 }
 
 # ── Phase 1: CLI Provisioning (direct DB access) ──────────────
@@ -205,8 +223,9 @@ svc = d['data']['createService']
 print()
 print('  Integration Keys:')
 for ik in svc.get('integrationKeys', []):
-    print(f\"    {ik['name']:30s}  {ik['id']}\")
-print(f\"  Escalation Policy: {svc['escalationPolicy']['name']} ({svc['escalationPolicy']['id']})\")
+    print('    ' + ik['name'].ljust(30) + '  ' + ik['id'])
+ep = svc['escalationPolicy']
+print('  Escalation Policy: ' + ep['name'] + ' (' + ep['id'] + ')')
 "
   else
     err "Failed to create service"
@@ -219,40 +238,74 @@ else
 svc = d['data']['service']
 print('  Integration Keys:')
 for ik in svc.get('integrationKeys', []):
-    print(f\"    {ik['name']:30s}  {ik['id']}\")
+    print('    ' + ik['name'].ljust(30) + '  ' + ik['id'])
 "
 fi
 
-# ── Phase 6: Twilio config (optional) ─────────────────────────
+# ── Phase 6: Twilio config via GraphQL ─────────────────────────
 if [ -n "${TWILIO_ACCOUNT_SID:-}" ] && [ -n "${TWILIO_AUTH_TOKEN:-}" ]; then
   info "Phase 6: Configuring Twilio SMS..."
-  TWILIO_CONFIG="{\"Twilio.Enable\": true, \"Twilio.AccountSID\": \"${TWILIO_ACCOUNT_SID}\", \"Twilio.AuthToken\": \"${TWILIO_AUTH_TOKEN}\""
-  [ -n "${TWILIO_FROM_NUMBER:-}" ] && TWILIO_CONFIG="${TWILIO_CONFIG}, \"Twilio.FromNumber\": \"${TWILIO_FROM_NUMBER}\""
-  TWILIO_CONFIG="${TWILIO_CONFIG}}"
 
-  if goalert_cli set-config --data "$TWILIO_CONFIG" 2>&1 | grep -q "Saved"; then
-    log "Twilio SMS configured"
+  # Build setConfig input array
+  TWILIO_INPUT="[{id: \\\"Twilio.Enable\\\", value: \\\"true\\\"}, {id: \\\"Twilio.AccountSID\\\", value: \\\"${TWILIO_ACCOUNT_SID}\\\"}, {id: \\\"Twilio.AuthToken\\\", value: \\\"${TWILIO_AUTH_TOKEN}\\\"}"
+  [ -n "${TWILIO_FROM_NUMBER:-}" ] && TWILIO_INPUT="${TWILIO_INPUT}, {id: \\\"Twilio.FromNumber\\\", value: \\\"${TWILIO_FROM_NUMBER}\\\"}"
+  TWILIO_INPUT="${TWILIO_INPUT}]"
+
+  TWILIO_RESULT=$(gql "mutation { setConfig(input: ${TWILIO_INPUT}) }")
+  if echo "$TWILIO_RESULT" | grep -q '"setConfig":true'; then
+    log "Twilio SMS configured via GraphQL"
   else
-    warn "Twilio config may have failed (check manually)"
+    err "Twilio config may have failed"
+    echo "$TWILIO_RESULT" | $PYTHON -m json.tool 2>/dev/null || echo "$TWILIO_RESULT"
   fi
 else
   info "Phase 6: Twilio not configured (set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)"
 fi
 
-# ── Phase 7: Print Alertmanager webhook URLs ──────────────────
+# ── Phase 7: Carlos contact method + notification rule ─────────
+CARLOS_PHONE="${CARLOS_PHONE:-}"
+if [ -n "$CARLOS_PHONE" ] && [ "$CARLOS_ID" != "NONE" ] && [ -n "$CARLOS_ID" ]; then
+  info "Phase 7: Setting up Carlos SMS contact method..."
+
+  # Check if contact method already exists
+  CM_EXISTS=$(gql "{ user(id: \\\"${CARLOS_ID}\\\") { contactMethods { id name value } } }" | jq_py "
+cms = d.get('data',{}).get('user',{}).get('contactMethods',[])
+match = [c for c in cms if c.get('value') == '$CARLOS_PHONE']
+print(match[0]['id'] if match else 'NONE')
+")
+
+  if [ "$CM_EXISTS" = "NONE" ]; then
+    CM_RESULT=$(gql "mutation { createUserContactMethod(input: { userID: \\\"${CARLOS_ID}\\\", name: \\\"SMS - Carlos\\\", type: SMS, value: \\\"${CARLOS_PHONE}\\\", newUserNotificationRule: { delayMinutes: 0 } }) { id name value } }")
+    CM_ID=$(echo "$CM_RESULT" | jq_py "print(d['data']['createUserContactMethod']['id'])" || echo "")
+    if [ -n "$CM_ID" ]; then
+      log "Contact method created: SMS ${CARLOS_PHONE} (ID: $CM_ID)"
+      log "Notification rule: immediate (0 min delay)"
+    else
+      err "Failed to create contact method"
+      echo "$CM_RESULT" | $PYTHON -m json.tool 2>/dev/null || echo "$CM_RESULT"
+    fi
+  else
+    log "Contact method already exists for ${CARLOS_PHONE} (ID: $CM_EXISTS)"
+  fi
+else
+  info "Phase 7: Carlos phone not configured (set CARLOS_PHONE)"
+fi
+
+# ── Phase 8: Print Alertmanager webhook URLs ──────────────────
 echo ""
-info "Phase 7: Alertmanager webhook configuration"
+info "Phase 8: Alertmanager webhook configuration"
 
 if [ -n "$SVC_ID" ]; then
-  gql "{ service(id: \\\"${SVC_ID}\\\") { integrationKeys { id name type } } }" | jq_py "
+  KEYS_JSON=$(gql "{ service(id: \\\"${SVC_ID}\\\") { integrationKeys { id name type } } }")
+  echo "$KEYS_JSON" | jq_py "
 svc = d['data']['service']
 print()
 print('  Alertmanager receiver URLs:')
-print('  ' + '─' * 55)
+print('  ' + '-' * 55)
 for ik in svc.get('integrationKeys', []):
     ep = 'prometheusalertmanager' if ik['type'] == 'prometheusAlertmanager' else 'generic'
-    print(f\"  {ik['name']}:\")
-    print(f\"    http://GOALERT_HOST:8081/api/v2/{ep}/incoming?token={ik['id']}\")
+    print('  ' + ik['name'] + ':')
+    print('    http://GOALERT_HOST:8081/api/v2/' + ep + '/incoming?token=' + ik['id'])
     print()
 "
 fi
