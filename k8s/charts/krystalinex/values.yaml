@@ -163,10 +163,17 @@ redis:
       memory: 128Mi
 
 postgresExporter:
-  enabled: false
+  enabled: true
   image:
     repository: prometheuscommunity/postgres-exporter
     tag: latest
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
 
 goalert:
   enabled: true
