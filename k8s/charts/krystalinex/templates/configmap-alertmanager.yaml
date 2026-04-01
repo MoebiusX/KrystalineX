@@ -71,12 +71,12 @@ data:
     receivers:
       - name: 'goalert-webhook'
         webhook_configs:
-          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/prometheusalertmanager/incoming?token=57dff51f-34a8-44c6-be4b-212e7a09250b'
+          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/prometheusalertmanager/incoming?token={{ .Values.goalert.integrationTokens.general }}'
             send_resolved: true
 
       - name: 'goalert-critical'
         webhook_configs:
-          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/prometheusalertmanager/incoming?token=57dff51f-34a8-44c6-be4b-212e7a09250b'
+          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/prometheusalertmanager/incoming?token={{ .Values.goalert.integrationTokens.critical }}'
             send_resolved: true
         email_configs:
           - to: 'carlos@krystaline.io'
@@ -86,7 +86,7 @@ data:
 
       - name: 'goalert-security'
         webhook_configs:
-          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/generic/incoming'
+          - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/generic/incoming?token={{ .Values.goalert.integrationTokens.security }}'
             send_resolved: true
 
       - name: 'ntfy-critical'

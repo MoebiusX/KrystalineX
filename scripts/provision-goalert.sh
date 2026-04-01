@@ -72,7 +72,8 @@ goalert_cli() {
 
 gql() {
   local query="$1"
-  curl -sf -b "$COOKIE_JAR" "${GOALERT_URL}/api/graphql" \
+  local cookie=$(cat "$COOKIE_JAR")
+  curl -sf -H "Cookie: $cookie" "${GOALERT_URL}/api/graphql" \
     -H "Content-Type: application/json" \
     -d "{\"query\":\"$query\"}" 2>&1 || { err "GraphQL request failed"; return 1; }
 }
@@ -124,15 +125,20 @@ done
 # ── Phase 3: Authenticate ─────────────────────────────────────
 info "Phase 3: Authenticating as admin..."
 
-LOGIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-  -c "$COOKIE_JAR" -L \
+# Extract session cookie from response headers (works even with Secure cookies over HTTP)
+AUTH_HEADERS=$(curl -sD - -o /dev/null \
   -X POST "${GOALERT_URL}/api/v2/identity/providers/basic" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -H "Referer: ${GOALERT_URL}" \
+  -H "Referer: ${GOALERT_REFERER:-${GOALERT_URL}}" \
   -d "username=admin&password=${GOALERT_ADMIN_PASS}" 2>&1)
 
-if [ "$LOGIN_STATUS" = "200" ]; then
+LOGIN_STATUS=$(echo "$AUTH_HEADERS" | head -1 | sed -n 's/.*\([0-9][0-9][0-9]\).*/\1/p')
+SESSION_COOKIE=$(echo "$AUTH_HEADERS" | grep -o 'goalert_session[^;]*' | head -1)
+
+if ([ "$LOGIN_STATUS" = "200" ] || [ "$LOGIN_STATUS" = "302" ]) && [ -n "$SESSION_COOKIE" ]; then
   log "Authenticated as admin"
+  # Store cookie for gql() function
+  echo "$SESSION_COOKIE" > "$COOKIE_JAR"
 else
   err "Authentication failed (HTTP $LOGIN_STATUS)"
   exit 1

@@ -196,6 +196,10 @@ goalert:
     enabled: true
     adminPassword: "REDACTED"
     carlosPassword: "REDACTED"
+  integrationTokens:
+    general: "99f40a5f-b3dc-43ae-8dc3-1ec0ea77ae14"
+    critical: "8d5aa492-5110-48c8-ba7a-f751eaed9fb5"
+    security: "2f5a2fa6-338b-41fe-9dee-e1197e3a0a4c"
 
 alertmanager:
   enabled: true
