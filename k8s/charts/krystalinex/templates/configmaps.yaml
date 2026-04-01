@@ -960,25 +960,25 @@ data:
           - record: slo:server:probe_success_ratio_5m
             expr: |
               max(avg_over_time(up{job="krystalinex-server"}[5m]))
-              or vector(0)
+              or vector(1)
           - record: slo:server:probe_success_ratio_1h
             expr: |
               max(avg_over_time(up{job="krystalinex-server"}[1h]))
-              or vector(0)
+              or vector(1)
           - record: slo:server:probe_success_ratio_1d
             expr: |
               max(avg_over_time(up{job="krystalinex-server"}[1d]))
-              or vector(0)
+              or vector(1)
           - record: slo:availability:composite_1h
             expr: |
               (1 - (slo:http_requests:error_ratio_1h or vector(0)))
               *
-              (slo:server:probe_success_ratio_1h or vector(0))
+              (slo:server:probe_success_ratio_1h or vector(1))
           - record: slo:availability:composite_1d
             expr: |
               (1 - (slo:http_requests:error_ratio_1d or vector(0)))
               *
-              (slo:server:probe_success_ratio_1d or vector(0))
+              (slo:server:probe_success_ratio_1d or vector(1))
 
       - name: slo:error_budget
         interval: 1m

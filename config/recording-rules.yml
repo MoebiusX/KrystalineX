@@ -138,37 +138,37 @@ groups:
       # Best-target uptime: max across pods of avg scrape success
       # 1.0 = at least one pod was up the entire window
       # 0.0 = ALL pods were down the entire window
+      # Default to 1 (healthy) when no probe data exists — absence of data
+      # should not penalize error budget. Error ratio handles 5xx errors.
       - record: slo:server:probe_success_ratio_5m
         expr: |
           max(avg_over_time(up{job="krystalinex-server"}[5m]))
-          or vector(0)
+          or vector(1)
 
       - record: slo:server:probe_success_ratio_1h
         expr: |
           max(avg_over_time(up{job="krystalinex-server"}[1h]))
-          or vector(0)
+          or vector(1)
 
       - record: slo:server:probe_success_ratio_1d
         expr: |
           max(avg_over_time(up{job="krystalinex-server"}[1d]))
-          or vector(0)
+          or vector(1)
 
-      # Composite availability = lower of (request_success, probe_success)
-      # Request-based SLI catches 5xx errors
-      # Probe-based SLI catches total outages
-      # Uses: a * b + (1-a) * b = b when a=1, and approaches 0 when either drops
-      # Simpler: multiply request availability by probe availability
+      # Composite availability = request_success × probe_success
+      # When probe has no data, it defaults to 1 (healthy).
+      # When error ratio has no data (no traffic), it defaults to 0 (no errors).
       - record: slo:availability:composite_1h
         expr: |
           (1 - (slo:http_requests:error_ratio_1h or vector(0)))
           *
-          (slo:server:probe_success_ratio_1h or vector(0))
+          (slo:server:probe_success_ratio_1h or vector(1))
 
       - record: slo:availability:composite_1d
         expr: |
           (1 - (slo:http_requests:error_ratio_1d or vector(0)))
           *
-          (slo:server:probe_success_ratio_1d or vector(0))
+          (slo:server:probe_success_ratio_1d or vector(1))
 
   # ============================================
   # ERROR BUDGET TRACKING
