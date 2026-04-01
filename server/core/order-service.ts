@@ -273,7 +273,7 @@ export class OrderService {
                         await this.updateUserWallet(userId, request.side, request.quantity, safeExecutionResponse.fillPrice);
                         // Emit business metrics for successful trade
                         recordTrade(request.pair, request.side, request.quantity, safeExecutionResponse.totalValue);
-                        recordOrderMetrics(request.side, 'FILLED', 0); // Duration tracked separately
+                        recordOrderMetrics(request.side, 'filled', 0); // Duration tracked separately
                         // Check for whale transaction
                         amountAnomalyDetector.checkOrder({
                             orderId,
