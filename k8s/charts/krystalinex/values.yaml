@@ -45,13 +45,17 @@ server:
       path: /health
       port: 5000
     initialDelaySeconds: 60
+    timeoutSeconds: 3
     periodSeconds: 10
+    failureThreshold: 5
   readinessProbe:
     httpGet:
       path: /ready
       port: 5000
     initialDelaySeconds: 30
+    timeoutSeconds: 3
     periodSeconds: 5
+    failureThreshold: 5
 
 paymentProcessor:
   enabled: true
