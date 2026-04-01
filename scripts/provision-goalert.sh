@@ -242,9 +242,49 @@ for ik in svc.get('integrationKeys', []):
 "
 fi
 
-# ── Phase 6: Twilio config via GraphQL ─────────────────────────
+# ── Phase 6: On-call schedule + daily rotation ─────────────────
+info "Phase 6: Provisioning on-call schedule..."
+
+SCHED_CHECK=$(gql "{ schedules { nodes { id name } } }" | jq_py "
+scheds = d.get('data',{}).get('schedules',{}).get('nodes',[])
+kx = [s for s in scheds if s.get('name') == 'KrystalineX On-Call']
+print(kx[0]['id'] if kx else 'NONE')
+")
+
+if [ "$SCHED_CHECK" = "NONE" ]; then
+  # Create schedule with inline daily rotation targeting Carlos
+  # start: today at midnight UTC; weekdayFilter: all 7 days; 00:00-00:00 = 24h
+  ROTATION_USERS="[\\\"${CARLOS_ID}\\\"]"
+  if [ "$ADMIN_ID" != "NONE" ] && [ -n "$ADMIN_ID" ]; then
+    ROTATION_USERS="[\\\"${CARLOS_ID}\\\", \\\"${ADMIN_ID}\\\"]"
+  fi
+  TODAY=$(date -u +"%Y-%m-%dT00:00:00Z" 2>/dev/null || date -Iseconds | sed 's/T.*/T00:00:00Z/')
+
+  SCHED_RESULT=$(gql "mutation { createSchedule(input: { name: \\\"KrystalineX On-Call\\\", description: \\\"Primary on-call schedule for KrystalineX platform\\\", timeZone: \\\"Europe/Amsterdam\\\", targets: [{ newRotation: { name: \\\"Daily Shift\\\", description: \\\"Daily on-call rotation\\\", timeZone: \\\"Europe/Amsterdam\\\", type: daily, shiftLength: 1, start: \\\"${TODAY}\\\", userIDs: ${ROTATION_USERS} }, rules: [{ start: \\\"00:00\\\", end: \\\"00:00\\\", weekdayFilter: [true, true, true, true, true, true, true] }] }] }) { id name targets { target { id name type } rules { start end weekdayFilter } } } }")
+
+  SCHED_ID=$(echo "$SCHED_RESULT" | jq_py "print(d['data']['createSchedule']['id'])" || echo "")
+  if [ -n "$SCHED_ID" ]; then
+    log "Schedule 'KrystalineX On-Call' created (ID: $SCHED_ID)"
+    echo "$SCHED_RESULT" | jq_py "
+sched = d['data']['createSchedule']
+for t in sched.get('targets', []):
+    tgt = t.get('target', {})
+    print('  Rotation: ' + tgt.get('name', 'unknown') + ' (' + tgt.get('id', '') + ')')
+    for r in t.get('rules', []):
+        print('    Rule: ' + r.get('start','') + ' - ' + r.get('end','') + ' days=' + str(r.get('weekdayFilter','')))
+"
+  else
+    err "Failed to create schedule"
+    echo "$SCHED_RESULT" | $PYTHON -m json.tool 2>/dev/null || echo "$SCHED_RESULT"
+  fi
+else
+  SCHED_ID="$SCHED_CHECK"
+  log "Schedule 'KrystalineX On-Call' already exists (ID: $SCHED_ID)"
+fi
+
+# ── Phase 7: Twilio config via GraphQL ─────────────────────────
 if [ -n "${TWILIO_ACCOUNT_SID:-}" ] && [ -n "${TWILIO_AUTH_TOKEN:-}" ]; then
-  info "Phase 6: Configuring Twilio SMS..."
+  info "Phase 7: Configuring Twilio SMS..."
 
   # Build setConfig input array
   TWILIO_INPUT="[{id: \\\"Twilio.Enable\\\", value: \\\"true\\\"}, {id: \\\"Twilio.AccountSID\\\", value: \\\"${TWILIO_ACCOUNT_SID}\\\"}, {id: \\\"Twilio.AuthToken\\\", value: \\\"${TWILIO_AUTH_TOKEN}\\\"}"
@@ -259,13 +299,13 @@ if [ -n "${TWILIO_ACCOUNT_SID:-}" ] && [ -n "${TWILIO_AUTH_TOKEN:-}" ]; then
     echo "$TWILIO_RESULT" | $PYTHON -m json.tool 2>/dev/null || echo "$TWILIO_RESULT"
   fi
 else
-  info "Phase 6: Twilio not configured (set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)"
+  info "Phase 7: Twilio not configured (set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)"
 fi
 
-# ── Phase 7: Carlos contact method + notification rule ─────────
+# ── Phase 8: Carlos contact method + notification rule ─────────
 CARLOS_PHONE="${CARLOS_PHONE:-}"
 if [ -n "$CARLOS_PHONE" ] && [ "$CARLOS_ID" != "NONE" ] && [ -n "$CARLOS_ID" ]; then
-  info "Phase 7: Setting up Carlos SMS contact method..."
+  info "Phase 8: Setting up Carlos SMS contact method..."
 
   # Check if contact method already exists
   CM_EXISTS=$(gql "{ user(id: \\\"${CARLOS_ID}\\\") { contactMethods { id name value } } }" | jq_py "
@@ -288,12 +328,12 @@ print(match[0]['id'] if match else 'NONE')
     log "Contact method already exists for ${CARLOS_PHONE} (ID: $CM_EXISTS)"
   fi
 else
-  info "Phase 7: Carlos phone not configured (set CARLOS_PHONE)"
+  info "Phase 8: Carlos phone not configured (set CARLOS_PHONE)"
 fi
 
-# ── Phase 8: Print Alertmanager webhook URLs ──────────────────
+# ── Phase 9: Print Alertmanager webhook URLs ──────────────────
 echo ""
-info "Phase 8: Alertmanager webhook configuration"
+info "Phase 9: Alertmanager webhook configuration"
 
 if [ -n "$SVC_ID" ]; then
   KEYS_JSON=$(gql "{ service(id: \\\"${SVC_ID}\\\") { integrationKeys { id name type } } }")
