@@ -232,6 +232,7 @@ function checkSemanticInvariants(results) {
 // ── Prometheus Client ────────────────────────────────────────────────────
 
 const PROM_URL = config.observability.prometheusUrl;
+const LOKI_URL = config.observability.lokiUrl;
 
 async function promQuery(expr) {
     const url = `${PROM_URL}/api/v1/query?query=${encodeURIComponent(expr)}`;
@@ -248,6 +249,31 @@ async function promQuery(expr) {
     } catch (err) {
         return { status: 'error', error: err.message, data: null };
     }
+}
+
+async function lokiQuery(expr) {
+    const url = `${LOKI_URL}/loki/api/v1/query?query=${encodeURIComponent(expr)}&limit=5`;
+    try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        if (!res.ok) {
+            return { status: 'error', error: `HTTP ${res.status}`, data: null };
+        }
+        const json = await res.json();
+        if (json.status !== 'success') {
+            return { status: 'error', error: json.error || 'query failed', data: null };
+        }
+        return { status: 'success', data: json.data };
+    } catch (err) {
+        return { status: 'error', error: err.message, data: null };
+    }
+}
+
+let lokiAvailable = null;
+async function checkLokiAvailability() {
+    if (lokiAvailable !== null) return lokiAvailable;
+    const res = await lokiQuery('{job=~".+"}');
+    lokiAvailable = res.status === 'success';
+    return lokiAvailable;
 }
 
 // ── Dashboard Parser ─────────────────────────────────────────────────────
@@ -280,7 +306,29 @@ function extractPanels(dashboard) {
                 continue;
             }
 
-            // Extract PromQL targets
+            // Detect panel-level datasource
+            const panelDsType = panel.datasource?.type;
+
+            // Loki panels — validate via Loki API
+            if (panelDsType === 'loki') {
+                const lokiTargets = (panel.targets || [])
+                    .map(t => ({ expr: t.expr, refId: t.refId }))
+                    .filter(t => t.expr);
+
+                panels.push({
+                    id: panel.id,
+                    title: panel.title,
+                    type: panel.type,
+                    row: currentRow,
+                    targets: lokiTargets,
+                    tier: PANEL_TIER[panel.id] || 'INFORMATIONAL',
+                    queryEngine: 'loki',
+                    skip: false,
+                });
+                continue;
+            }
+
+            // Extract PromQL targets (filter out any target-level Loki/Jaeger)
             const targets = (panel.targets || [])
                 .filter(t => t.datasource?.type !== 'loki' && t.datasource?.type !== 'jaeger'
                     && t.datasource?.uid !== '-- Grafana --')
@@ -292,7 +340,7 @@ function extractPanels(dashboard) {
                 .filter(t => t.expr);
 
             if (targets.length === 0 && panel.type !== 'row') {
-                // Non-Prometheus panel (Loki, Jaeger, text, etc.)
+                // Non-Prometheus panel (Jaeger, text, etc.)
                 const dsTypes = (panel.targets || []).map(t => t.datasource?.type).filter(Boolean);
                 panels.push({
                     id: panel.id,
@@ -300,7 +348,7 @@ function extractPanels(dashboard) {
                     type: panel.type,
                     row: currentRow,
                     targets: [],
-                    datasource: dsTypes[0] || 'unknown',
+                    datasource: dsTypes[0] || panelDsType || 'unknown',
                     skip: true,
                 });
                 continue;
@@ -313,6 +361,7 @@ function extractPanels(dashboard) {
                 row: currentRow,
                 targets,
                 tier: PANEL_TIER[panel.id] || 'INFORMATIONAL',
+                queryEngine: 'prometheus',
                 skip: false,
             });
 
@@ -352,6 +401,11 @@ async function validatePanel(panel) {
             reason: `Non-Prometheus datasource (${panel.datasource})`,
             queryResults: [],
         };
+    }
+
+    // Loki panels — validate via Loki API
+    if (panel.queryEngine === 'loki') {
+        return validateLokiPanel(panel);
     }
 
     const queryResults = [];
@@ -425,12 +479,75 @@ async function validatePanel(panel) {
     };
 }
 
+async function validateLokiPanel(panel) {
+    const available = await checkLokiAvailability();
+    if (!available) {
+        return {
+            ...panel,
+            status: 'SKIPPED',
+            reason: 'Loki unreachable',
+            queryResults: [],
+        };
+    }
+
+    const queryResults = [];
+    let hasData = false;
+    let hasError = false;
+
+    for (const target of panel.targets) {
+        const result = await lokiQuery(target.expr);
+
+        if (result.status === 'error') {
+            hasError = true;
+            queryResults.push({
+                refId: target.refId,
+                expr: target.expr,
+                status: 'ERROR',
+                error: result.error,
+                value: null,
+                seriesCount: 0,
+            });
+            continue;
+        }
+
+        const streams = result.data?.result || [];
+        const seriesCount = streams.length;
+        const lineCount = streams.reduce((acc, s) => acc + (s.values?.length || 0), 0);
+
+        if (seriesCount > 0) hasData = true;
+
+        queryResults.push({
+            refId: target.refId,
+            expr: target.expr,
+            status: seriesCount > 0 ? 'OK' : 'EMPTY',
+            value: lineCount > 0 ? `${lineCount} lines` : null,
+            seriesCount,
+        });
+    }
+
+    let status;
+    if (hasError) {
+        status = 'ERROR';
+    } else if (!hasData) {
+        status = 'EMPTY';
+    } else {
+        status = 'OK';
+    }
+
+    return {
+        ...panel,
+        status,
+        queryResults,
+        value: hasData ? 'logs flowing' : null,
+    };
+}
+
 // ── Freshness Check ──────────────────────────────────────────────────────
 
 async function checkFreshness(panels) {
-    // Check key metrics for staleness
+    // Check key metrics for staleness (use always-present metrics, not traffic-dependent ones)
     const freshnessChecks = [
-        { name: 'http_requests_total', maxAge: 120, category: 'Application' },
+        { name: 'nodejs_process_resident_memory_bytes{job="krystalinex-server"}', maxAge: 120, category: 'Application' },
         { name: 'node_cpu_seconds_total', maxAge: 120, category: 'Infrastructure' },
         { name: 'pg_stat_activity_count', maxAge: 120, category: 'Database' },
         { name: 'up', maxAge: 120, category: 'Core' },
@@ -506,8 +623,8 @@ function printReport(panelResults, freshness, semanticViolations) {
     console.log(`\n${c.bold}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}`);
     console.log(`${c.bold}  🔍 KrystalineX Dashboard Validator${c.reset}`);
     console.log(`${c.bold}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${c.reset}`);
-    console.log(`  Target: ${config.isRemote ? '🌐 K8s' : '🏠 Local'}  Prometheus: ${PROM_URL}`);
-    console.log(`  Panels: ${panelResults.length}  Queries: ${panelResults.reduce((a, p) => a + p.targets.length, 0)}`);
+    console.log(`  Target: ${config.isRemote ? '🌐 K8s' : '🏠 Local'}  Prometheus: ${PROM_URL}${lokiAvailable ? `  Loki: ✅` : ''}`);
+    console.log(`  Panels: ${panelResults.length}  Queries: ${panelResults.reduce((a, p) => a + (p.queryResults?.length || p.targets.length), 0)}`);
     console.log();
 
     for (const [row, panels] of resultsByRow) {
@@ -610,14 +727,16 @@ async function main() {
     // 1. Load dashboard
     const dashboard = loadDashboard();
     const { panels } = extractPanels(dashboard);
-    const promPanels = panels.filter(p => !p.skip && p.targets.length > 0);
+    const promPanels = panels.filter(p => !p.skip && p.queryEngine === 'prometheus');
+    const lokiPanels = panels.filter(p => !p.skip && p.queryEngine === 'loki');
+    const validatablePanels = [...promPanels, ...lokiPanels];
 
     if (!JSON_OUTPUT) {
         console.log(`\n📊 Loaded dashboard: ${dashboard.title || 'Unified Observability'}`);
-        console.log(`   ${panels.length} panels total, ${promPanels.length} with Prometheus queries`);
+        console.log(`   ${panels.length} panels total, ${promPanels.length} with Prometheus queries, ${lokiPanels.length} with Loki queries`);
     }
 
-    // 2. Connectivity check
+    // 2. Connectivity check — Prometheus
     const healthCheck = await promQuery('up');
     if (healthCheck.status === 'error') {
         console.error(`\n${c.red}❌ Cannot reach Prometheus at ${PROM_URL}${c.reset}`);
@@ -629,7 +748,22 @@ async function main() {
     if (!JSON_OUTPUT) {
         const upCount = healthCheck.data?.result?.length || 0;
         console.log(`   ${c.green}Prometheus reachable — ${upCount} targets${c.reset}`);
-        console.log(`\n   Validating ${promPanels.length} panels...`);
+    }
+
+    // 2b. Connectivity check — Loki (non-blocking)
+    if (lokiPanels.length > 0) {
+        const lokiOk = await checkLokiAvailability();
+        if (!JSON_OUTPUT) {
+            if (lokiOk) {
+                console.log(`   ${c.green}Loki reachable — ${LOKI_URL}${c.reset}`);
+            } else {
+                console.log(`   ${c.yellow}Loki unreachable — Loki panels will be skipped${c.reset}`);
+            }
+        }
+    }
+
+    if (!JSON_OUTPUT) {
+        console.log(`\n   Validating ${validatablePanels.length} panels...`);
     }
 
     // 3. Validate all panels (with concurrency limit)
@@ -639,14 +773,14 @@ async function main() {
         ...p, status: 'SKIPPED', reason: `Non-Prometheus (${p.datasource})`, queryResults: [],
     }));
 
-    for (let i = 0; i < promPanels.length; i += CONCURRENCY) {
-        const batch = promPanels.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < validatablePanels.length; i += CONCURRENCY) {
+        const batch = validatablePanels.slice(i, i + CONCURRENCY);
         const results = await Promise.all(batch.map(validatePanel));
         panelResults.push(...results);
 
         if (!JSON_OUTPUT && !CI_MODE) {
-            const done = Math.min(i + CONCURRENCY, promPanels.length);
-            process.stdout.write(`\r   Progress: ${done}/${promPanels.length} panels checked`);
+            const done = Math.min(i + CONCURRENCY, validatablePanels.length);
+            process.stdout.write(`\r   Progress: ${done}/${validatablePanels.length} panels checked`);
         }
     }
     if (!JSON_OUTPUT && !CI_MODE) process.stdout.write('\n');

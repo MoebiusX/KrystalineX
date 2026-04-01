@@ -157,6 +157,14 @@ const config = {
             if (isRemote) return `${REMOTE_BASE}/otel`;
             return process.env.OTEL_COLLECTOR_URL || 'http://localhost:4318';
         },
+        get lokiUrl() {
+            if (isRemote) return `${REMOTE_BASE}/grafana/api/datasources/proxy/uid/loki`;
+            return process.env.LOKI_URL || 'http://localhost:3100';
+        },
+        get grafanaUrl() {
+            if (isRemote) return `${REMOTE_BASE}/grafana`;
+            return process.env.GRAFANA_URL || 'http://localhost:3000';
+        },
     },
 
     // Timeouts (in seconds)
@@ -207,6 +215,8 @@ console.log(`      Admin: ${config.kong.adminUrl}`);
 console.log('   Observability:');
 console.log(`      Jaeger: ${config.observability.jaegerUrl}`);
 console.log(`      Prometheus: ${config.observability.prometheusUrl}`);
+console.log(`      Loki: ${config.observability.lokiUrl}`);
+console.log(`      Grafana: ${config.observability.grafanaUrl}`);
 console.log(`      OTEL Collector: ${config.observability.otelCollectorUrl}`);
 console.log('   Timeouts (seconds):');
 console.log(`      Kong Admin: ${config.timeouts.kongAdmin}s, Proxy: ${config.timeouts.kongProxy}s`);
