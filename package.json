@@ -41,7 +41,11 @@
     "loadtest:medium": "node scripts/load-test.js --profile medium",
     "loadtest:heavy": "node scripts/load-test.js --profile heavy",
     "loadtest:stress": "node scripts/load-test.js --profile stress",
-    "loadtest:remote": "node scripts/load-test.js --remote"
+    "loadtest:remote": "node scripts/load-test.js --remote",
+    "validate:dashboard": "node scripts/validate-dashboard.js",
+    "validate:dashboard:remote": "node scripts/validate-dashboard.js --remote",
+    "validate:dashboard:ci": "node scripts/validate-dashboard.js --ci",
+    "validate:dashboard:json": "node scripts/validate-dashboard.js --json"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

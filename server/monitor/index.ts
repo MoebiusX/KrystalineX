@@ -24,6 +24,9 @@ import { historyStore } from './history-store';
 import { amountProfiler } from './amount-profiler';
 import { amountAnomalyDetector } from './amount-anomaly-detector';
 import { bayesianInference } from '../bayesian';
+import { businessStatsService } from '../services/business-stats-service';
+
+let businessStatsInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Start all monitor services
@@ -68,6 +71,22 @@ export function startMonitor(): void {
     }
 
     logger.info('Monitor services started successfully');
+
+    // Start periodic business stats sync (active users, trade gauges)
+    // Without this, Prometheus gauges like kx_active_users_current stay at 0
+    // because they're only updated on-demand via API calls.
+    setTimeout(() => {
+        const syncStats = async () => {
+            try {
+                await businessStatsService.getStats();
+            } catch (error) {
+                logger.error({ err: error }, 'Failed to sync business stats to Prometheus');
+            }
+        };
+        syncStats(); // initial sync
+        businessStatsInterval = setInterval(syncStats, 30_000); // every 30s
+        logger.info('Business stats Prometheus sync started (30s interval)');
+    }, 5000); // delay 5s to let DB connections stabilize
 }
 
 /**
@@ -86,6 +105,12 @@ export function stopMonitor(): void {
 
     // Stop Bayesian inference
     bayesianInference.stop();
+
+    // Stop business stats sync
+    if (businessStatsInterval) {
+        clearInterval(businessStatsInterval);
+        businessStatsInterval = null;
+    }
 
     logger.info('Monitor services stopped');
 }
