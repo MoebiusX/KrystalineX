@@ -12,7 +12,7 @@ import { registerZKTools } from './tools/zk-proofs.js';
 import { registerSystemTools } from './tools/system.js';
 import { registerResources } from './resources/overview.js';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 
 export interface ServerOptions {
   /** Tool groups to enable. Defaults to all. */
