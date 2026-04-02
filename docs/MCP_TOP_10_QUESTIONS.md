@@ -1,4 +1,4 @@
-# OTEL MCP Server — Top 10 Questions It Answers
+# OTEL MCP Server — Top 15 Questions It Answers
 
 The OTEL MCP Server bridges AI agents to KrystalineX's observability stack (Jaeger, Prometheus, Loki) and application APIs (ZK proofs, anomaly detection). It exposes **23 tools** that enable both end‑users and platform engineers to interrogate the system through natural language.
 
@@ -170,6 +170,93 @@ SLO recording rules pre‑compute availability and latency budgets. The MCP serv
 **Example:**
 > *"How's our error budget?"*  
 > → `metrics_query` for both budgets → "Availability budget: 100% remaining (0 errors in window). Latency budget: 95% remaining — P95 at 45ms vs 500ms target. No burn rate alerts firing. 43 minutes of budget remaining this month."
+
+---
+
+## For Business Owners (CEO, CPO, Investors)
+
+### 11. "Are we meeting our uptime commitments to customers?"
+
+The question behind every SLA negotiation and board slide. Rather than trusting a status page, the MCP server provides the actual measured availability — computed from real request outcomes, not synthetic probes.
+
+| Tool | What it does |
+|------|-------------|
+| `metrics_query` | Instant SLO: `slo:availability:error_budget_remaining`, uptime percentages |
+| `metrics_query_range` | Historical availability trends — week over week, month over month |
+| `metrics_alerts` | SLO burn rate alerts — early warning before a breach |
+
+**Example:**
+> *"What's our uptime this month?"*  
+> → `metrics_query` → "99.97% availability (measured). Error budget: 100% remaining. Zero SLO breaches in the last 30 days. We can contractually offer 99.95% SLA with margin."
+
+---
+
+### 12. "How much does our infrastructure actually cost per trade?"
+
+Unit economics matter. By correlating request volume with infrastructure topology, the MCP server reveals cost‑per‑transaction dynamics without separate FinOps tooling.
+
+| Tool | What it does |
+|------|-------------|
+| `metrics_query` | Total request counts: `http_requests_total`, order volumes |
+| `metrics_targets` | Number of active infrastructure components (19 scrape targets = 19 billable services) |
+| `system_topology` | Full service map — understand what each trade touches |
+| `traces_dependencies` | Call fan‑out per request — how many downstream hops per order |
+
+**Example:**
+> *"What does our infrastructure footprint look like per trade?"*  
+> → `metrics_query` for daily order volume + `system_topology` for service count → "1,247 trades today across 22 services. Each trade traverses 4 services (API → RabbitMQ → Matcher → Wallet). 19 infrastructure components running. This gives you the denominator for cost‑per‑trade against your cloud bill."
+
+---
+
+### 13. "Can we prove to regulators that we're operating transparently?"
+
+Regulatory compliance in crypto means demonstrable auditability. The MCP server surfaces cryptographic proofs and full audit trails — the kind of evidence regulators actually want.
+
+| Tool | What it does |
+|------|-------------|
+| `zk_solvency` | Proof of reserves ≥ liabilities, generated every 60 seconds |
+| `zk_stats` | Proof generation history — total count, success rate, average proving time |
+| `zk_proof_get` | Individual trade proofs — cryptographic binding of price, quantity, timestamp |
+| `traces_search` | Full audit trail — every API call, every state change, end‑to‑end traced |
+
+**Example:**
+> *"What evidence do we have for a regulatory audit?"*  
+> → `zk_stats` → "14,293 trade proofs generated, 100% verification success rate. Solvency proofs every 60s for 30 days continuous. Every trade has an immutable OpenTelemetry trace linking price source → execution → settlement."
+
+---
+
+### 14. "Is the platform performing well enough to scale to 10× volume?"
+
+Before spending on marketing or onboarding institutional clients, you need to know if the platform can handle the load. The MCP server reveals headroom directly from production telemetry.
+
+| Tool | What it does |
+|------|-------------|
+| `metrics_query` | Current throughput, CPU/memory utilization, connection pool saturation |
+| `metrics_query_range` | Load trends — are we growing toward a ceiling? |
+| `anomalies_baselines` | Per‑operation baselines — know what "normal" looks like so you can model 10× |
+| `anomalies_active` | Active anomalies — are we already stressed at current volume? |
+
+**Example:**
+> *"Can we handle 10× current volume?"*  
+> → `metrics_query` for resource utilization + `anomalies_baselines` for latency norms → "Current P95 trade latency: 45ms at ~50 trades/min. Database connections at 12/100 (88% headroom). No active anomalies. Event loop lag: 2ms. At 10× you'd hit ~120ms P95 and 60% DB connection usage — comfortable margin. RabbitMQ queue depth is the first bottleneck to watch."
+
+---
+
+### 15. "What went wrong during yesterday's incident?"
+
+Investors and board members ask this after every outage. The MCP server lets an AI agent reconstruct the full incident timeline — from first anomaly to resolution — without requiring an engineer to write the post‑mortem manually.
+
+| Tool | What it does |
+|------|-------------|
+| `anomalies_active` | What anomalies were detected, at what severity |
+| `metrics_alerts` | Which alerts fired, when, and for how long |
+| `traces_search` | Affected traces during the incident window |
+| `logs_query` | Error logs correlated with the incident timeframe |
+| `metrics_query_range` | Metric graphs showing degradation and recovery |
+
+**Example:**
+> *"What happened yesterday at 3pm?"*  
+> → `metrics_alerts` for firing history + `logs_query` for errors in window + `traces_search` for slow traces → "At 14:58 UTC, PriceFeedUnavailable fired (Binance WebSocket disconnected). Self‑healing reconnected at stage 1 within 8 seconds. 3 trades experienced 200ms additional latency during the 8s window. No failed trades. Alert auto‑resolved at 14:59. Total customer impact: 8 seconds of degraded price freshness, zero order failures."
 
 ---
 
