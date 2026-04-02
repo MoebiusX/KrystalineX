@@ -1,4 +1,4 @@
-# OTEL MCP Server — Top 15 Questions It Answers
+# OTEL MCP Server — Top 20 Questions It Answers
 
 The OTEL MCP Server bridges AI agents to KrystalineX's observability stack (Jaeger, Prometheus, Loki) and application APIs (ZK proofs, anomaly detection). It exposes **23 tools** that enable both end‑users and platform engineers to interrogate the system through natural language.
 
@@ -257,6 +257,92 @@ Investors and board members ask this after every outage. The MCP server lets an 
 **Example:**
 > *"What happened yesterday at 3pm?"*  
 > → `metrics_alerts` for firing history + `logs_query` for errors in window + `traces_search` for slow traces → "At 14:58 UTC, PriceFeedUnavailable fired (Binance WebSocket disconnected). Self‑healing reconnected at stage 1 within 8 seconds. 3 trades experienced 200ms additional latency during the 8s window. No failed trades. Alert auto‑resolved at 14:59. Total customer impact: 8 seconds of degraded price freshness, zero order failures."
+
+---
+
+## For Product & Growth (Head of Product, VP Growth)
+
+### 16. "How many users are active on the platform right now?"
+
+The north‑star engagement metric. The MCP server derives real‑time active users from actual authenticated request telemetry — not analytics JavaScript that ad‑blockers strip out.
+
+| Tool | What it does |
+|------|-------------|
+| `metrics_query` | Active sessions, authenticated request rate, WebSocket connections |
+| `metrics_query_range` | DAU/MAU trends, peak‑hour patterns, week‑over‑week growth |
+| `logs_query` | Login events — count distinct users from auth logs |
+
+**Example:**
+> *"How many users are online right now?"*  
+> → `metrics_query` for active WebSocket connections + authenticated request rate → "47 active WebSocket connections. 12 unique users made API calls in the last 5 minutes. Peak today: 63 concurrent at 14:30 UTC."
+
+---
+
+### 17. "What's our daily trade volume and how is it trending?"
+
+Trade volume is the core product‑market‑fit signal for an exchange. The MCP server provides exact counts and USD notional from production telemetry — no reporting lag.
+
+| Tool | What it does |
+|------|-------------|
+| `metrics_query` | Total orders today: `http_requests_total{path="/api/v1/orders",method="POST"}` |
+| `metrics_query_range` | Volume trends — daily, weekly, monthly curves |
+| `traces_search` | Individual trade traces — filter by pair, size, time window |
+| `traces_operations` | Which trading operations are most active |
+
+**Example:**
+> *"What's today's trade volume?"*  
+> → `metrics_query` for order counts + `metrics_query_range` for trend → "1,247 trades executed today (BTC/USD: 892, ETH/USD: 355). Up 18% vs same day last week. Average order size: 0.04 BTC. Peak trading hour: 13:00–14:00 UTC."
+
+---
+
+### 18. "Where are users dropping off in the signup‑to‑first‑trade funnel?"
+
+Every step from registration to first trade is instrumented with OpenTelemetry spans. The MCP server lets you measure the actual conversion funnel from backend telemetry.
+
+| Tool | What it does |
+|------|-------------|
+| `traces_search` | Find traces for each funnel step: registration, KYC, deposit, first order |
+| `traces_operations` | List all operations per service — see which endpoints are called |
+| `metrics_query` | Request counts per endpoint — compare signup vs deposit vs trade counts |
+| `logs_query` | Error/validation failure logs at each step — why users fail |
+
+**Example:**
+> *"Where's the funnel leaking?"*  
+> → `metrics_query` for request counts at each step → "Last 7 days: 340 registrations → 285 KYC completions (84%) → 142 first deposits (50%) → 98 first trades (69%). Biggest drop: KYC‑to‑deposit. `logs_query` shows 31 deposit attempts failed with 'unsupported currency' — users are trying to deposit EUR but only USD is enabled."
+
+---
+
+### 19. "Which features are users actually using?"
+
+Feature adoption drives roadmap prioritization. Every API endpoint and UI action generates traces — the MCP server turns this into a usage heatmap.
+
+| Tool | What it does |
+|------|-------------|
+| `traces_operations` | All operations called per service — natural feature usage signal |
+| `metrics_query` | Request counts per endpoint, per time period |
+| `metrics_query_range` | Adoption trends after feature launches |
+| `traces_dependencies` | Which services a feature touches — understand complexity vs usage |
+
+**Example:**
+> *"Which features get the most use?"*  
+> → `metrics_query` for request counts by endpoint → "Top 5 by volume: (1) GET /prices — 48,200/day, (2) GET /portfolio — 12,400/day, (3) POST /orders — 1,247/day, (4) GET /orderbook — 890/day, (5) POST /transfers — 67/day. ZK proof verification (GET /proofs/verify) called 340 times — users are actively checking trade fairness."
+
+---
+
+### 20. "Is poor performance driving users away?"
+
+The link between engineering metrics and business outcomes. The MCP server correlates latency/error spikes with user activity drops — connecting SRE data to churn.
+
+| Tool | What it does |
+|------|-------------|
+| `metrics_query_range` | Overlay latency P95 with active user count over time |
+| `anomalies_active` | Current anomalies that may be impacting user experience |
+| `anomalies_baselines` | What "normal" performance looks like — detect degradation before users notice |
+| `traces_search` | Find user‑facing requests that exceeded acceptable latency |
+
+**Example:**
+> *"Did last night's slowdown affect users?"*  
+> → `metrics_query_range` for P95 latency + active sessions over 24h → "P95 spiked to 1.2s between 02:00–02:15 UTC. Active WebSocket connections dropped from 28 to 19 during that window (32% drop). 6 users reconnected after the spike resolved. Anomaly detector classified it SEV‑3 (self‑healed via stage 1 reconnect in 8s)."
 
 ---
 
