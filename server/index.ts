@@ -30,6 +30,8 @@ import tradeRoutes from "./trade/routes";
 import publicRoutes from "./api/public-routes";
 import healthRoutes from "./api/health-routes";
 import { binanceFeed } from "./services/binance-feed";
+import { coingeckoFeed } from "./services/coingecko-feed";
+import { priceFeedManager } from "./services/price-feed-manager";
 import { createUserContextMiddleware } from "./middleware/user-context";
 
 const logger = createLogger('server');
@@ -101,12 +103,14 @@ app.use(createUserContextMiddleware());
     logger.warn({ error }, 'RabbitMQ initialization failed - continuing without message queue');
   }
 
-  // Start real-time price feed (Binance public WebSocket - no API key needed)
+  // Start multi-provider price feed with automatic failover
   try {
-    binanceFeed.start();
-    logger.info('Binance price feed started - real-time prices enabled');
+    priceFeedManager.register(binanceFeed);
+    priceFeedManager.register(coingeckoFeed);
+    priceFeedManager.start();
+    logger.info('Price feed manager started — Binance (primary) + CoinGecko (fallback)');
   } catch (error) {
-    logger.warn({ error }, 'Binance price feed failed to start - trading will show prices unavailable');
+    logger.warn({ error }, 'Price feed manager failed to start - trading will show prices unavailable');
   }
 
   // Check Kong Gateway health
@@ -224,12 +228,12 @@ app.use(createUserContextMiddleware());
       logger.error({ err: error }, 'Error stopping monitor services');
     }
 
-    // Stop Binance price feed
+    // Stop price feed manager (stops all providers)
     try {
-      binanceFeed.stop();
-      logger.info('Binance price feed stopped');
+      priceFeedManager.stop();
+      logger.info('Price feed manager stopped');
     } catch (error) {
-      logger.error({ err: error }, 'Error stopping Binance feed');
+      logger.error({ err: error }, 'Error stopping price feed manager');
     }
 
     // Stop transparency service

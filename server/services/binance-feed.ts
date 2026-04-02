@@ -1,19 +1,23 @@
 /**
  * Binance Price Feed
- * 
+ *
  * Connects to Binance public WebSocket API for real-time prices.
  * No API key required - uses public market data streams.
- * 
+ * Implements PriceFeedProvider for multi-provider failover.
+ *
  * Docs: https://binance-docs.github.io/apidocs/spot/en/#websocket-market-streams
  */
 
 import WebSocket from 'ws';
-import { priceService } from './price-service';
 import { createLogger } from '../lib/logger';
+import type {
+  PriceFeedProvider,
+  PriceUpdateCallback,
+  ProviderStatus,
+} from './price-feed-provider';
 
 const logger = createLogger('binance-feed');
 
-// Binance WebSocket endpoints
 const BINANCE_WS_URL = 'wss://stream.binance.com:9443/ws';
 
 // Symbols we care about (Binance format: lowercase + usdt)
@@ -25,146 +29,144 @@ const SYMBOL_MAP: Record<string, string> = {
   ethusdt: 'ETH',
 };
 
-let ws: WebSocket | null = null;
-let reconnectTimer: NodeJS.Timeout | null = null;
-let watchdogTimer: NodeJS.Timeout | null = null;
-let isRunning = false;
-let lastMessageTime = Date.now();
+export class BinanceFeed implements PriceFeedProvider {
+  readonly name = 'binance';
+  readonly priority = 10; // Primary provider
 
-// Watchdog interval - checks connection every 30 seconds
-const WATCHDOG_INTERVAL = 30000;
-// If no data received for 2 minutes, consider connection stale
-const STALE_THRESHOLD = 120000;
+  private ws: WebSocket | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private watchdogTimer: NodeJS.Timeout | null = null;
+  private running = false;
+  private lastMessageTime = Date.now();
+  private onPrice: PriceUpdateCallback | null = null;
+  private tickCount = 0;
+  private errorCount = 0;
+  private reconnectCount = 0;
 
-/**
- * Binance Price Feed Service
- */
-export const binanceFeed = {
-  /**
-   * Start the price feed connection
-   */
-  start(): void {
-    if (isRunning) {
+  // Tightened from 120s to 45s — feed manager handles escalation
+  private readonly WATCHDOG_INTERVAL = 15_000;
+  private readonly STALE_THRESHOLD = 45_000;
+
+  start(onPrice: PriceUpdateCallback): void {
+    if (this.running) {
       logger.warn('Binance feed already running');
       return;
     }
 
-    isRunning = true;
+    this.onPrice = onPrice;
+    this.running = true;
+    this.lastMessageTime = Date.now();
     this.connect();
     this.startWatchdog();
     logger.info('Binance price feed started with watchdog');
-  },
+  }
 
-  /**
-   * Stop the price feed connection
-   */
   stop(): void {
     logger.info('Stopping Binance price feed...');
-    isRunning = false;
+    this.running = false;
 
-    if (watchdogTimer) {
-      clearInterval(watchdogTimer);
-      watchdogTimer = null;
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
     }
 
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
 
-    if (ws) {
-      ws.close();
-      ws = null;
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
 
-    priceService.setConnected(false, 'binance');
     logger.info('Binance price feed stopped');
-  },
+  }
 
-  /**
-   * Force reconnect the price feed
-   * Used by admin API to restart without pod restart
-   */
   reconnect(): void {
     logger.info('Force reconnecting Binance price feed...');
+    this.reconnectCount++;
+    const callback = this.onPrice;
     this.stop();
-    // Small delay before reconnecting
     setTimeout(() => {
-      isRunning = true;
-      this.connect();
-      this.startWatchdog();
-    }, 1000);
-  },
-
-  /**
-   * Get current connection status
-   */
-  getStatus(): { connected: boolean; running: boolean } {
-    return {
-      connected: ws?.readyState === WebSocket.OPEN,
-      running: isRunning,
-    };
-  },
-
-  /**
-   * Start watchdog timer to monitor connection health
-   * Auto-reconnects if connection drops
-   */
-  startWatchdog(): void {
-    if (watchdogTimer) {
-      clearInterval(watchdogTimer);
-    }
-
-    watchdogTimer = setInterval(() => {
-      if (!isRunning) {
-        logger.warn('Watchdog: isRunning is false, restarting...');
-        isRunning = true;
+      if (callback) {
+        this.onPrice = callback;
+        this.running = true;
+        this.lastMessageTime = Date.now();
         this.connect();
-        return;
+        this.startWatchdog();
       }
+    }, 1000);
+  }
 
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
+  getStatus(): ProviderStatus {
+    return {
+      name: this.name,
+      health: this.isHealthy() ? 'healthy' : this.getTickAge() > this.STALE_THRESHOLD ? 'unhealthy' : 'degraded',
+      connected: this.ws?.readyState === WebSocket.OPEN,
+      lastTickTime: this.lastMessageTime,
+      tickCount: this.tickCount,
+      errorCount: this.errorCount,
+      reconnectCount: this.reconnectCount,
+    };
+  }
+
+  isHealthy(): boolean {
+    if (!this.running) return false;
+    return this.ws?.readyState === WebSocket.OPEN && this.getTickAge() < this.STALE_THRESHOLD;
+  }
+
+  getTickAge(): number {
+    return Date.now() - this.lastMessageTime;
+  }
+
+  isConnected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  // ─── Internal ────────────────────────────────────────────
+
+  private startWatchdog(): void {
+    if (this.watchdogTimer) clearInterval(this.watchdogTimer);
+
+    this.watchdogTimer = setInterval(() => {
+      if (!this.running) return;
+
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         logger.warn('Watchdog: WebSocket not connected, reconnecting...');
         this.connect();
         return;
       }
 
-      // Staleness check: WS appears open but no data received
-      const timeSinceLastMessage = Date.now() - lastMessageTime;
-      if (timeSinceLastMessage > STALE_THRESHOLD) {
-        logger.warn({ staleSec: Math.round(timeSinceLastMessage / 1000) },
-          'Watchdog: WebSocket appears stale (no data received), force reconnecting...');
-        if (ws) {
-          ws.terminate(); // Force close (don't wait for graceful close)
-          ws = null;
+      const timeSinceLastMessage = Date.now() - this.lastMessageTime;
+      if (timeSinceLastMessage > this.STALE_THRESHOLD) {
+        logger.warn(
+          { staleSec: Math.round(timeSinceLastMessage / 1000) },
+          'Watchdog: WebSocket stale, force reconnecting...'
+        );
+        if (this.ws) {
+          this.ws.terminate();
+          this.ws = null;
         }
-        priceService.setConnected(false, 'binance');
         this.connect();
       }
-    }, WATCHDOG_INTERVAL);
+    }, this.WATCHDOG_INTERVAL);
+  }
 
-    logger.info('Watchdog timer started (30s interval, 2min staleness check)');
-  },
-
-  /**
-   * Connect to Binance WebSocket
-   */
-  connect(): void {
-    if (!isRunning) return;
+  private connect(): void {
+    if (!this.running) return;
 
     try {
-      // Subscribe to mini ticker streams for all symbols
       const streams = SYMBOLS.map(s => `${s}@miniTicker`).join('/');
       const url = `${BINANCE_WS_URL}/${streams}`;
 
-      ws = new WebSocket(url);
+      this.ws = new WebSocket(url);
 
-      ws.on('open', () => {
+      this.ws.on('open', () => {
         logger.info('Connected to Binance WebSocket');
-        priceService.setConnected(true, 'binance');
       });
 
-      ws.on('message', (data: Buffer) => {
+      this.ws.on('message', (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString());
           this.handleMessage(message);
@@ -173,64 +175,51 @@ export const binanceFeed = {
         }
       });
 
-      ws.on('close', () => {
+      this.ws.on('close', () => {
         logger.warn('Binance WebSocket closed');
-        priceService.setConnected(false, 'binance');
         this.scheduleReconnect();
       });
 
-      ws.on('error', (err) => {
+      this.ws.on('error', (err) => {
+        this.errorCount++;
         logger.error({ err }, 'Binance WebSocket error');
-        priceService.setConnected(false, 'binance');
       });
-
     } catch (err) {
+      this.errorCount++;
       logger.error({ err }, 'Failed to connect to Binance');
       this.scheduleReconnect();
     }
-  },
+  }
 
-  /**
-   * Handle incoming WebSocket message
-   */
-  handleMessage(message: any): void {
-    // Track last received message for staleness detection
-    lastMessageTime = Date.now();
+  private handleMessage(message: any): void {
+    this.lastMessageTime = Date.now();
 
-    // Mini ticker format: { e: '24hrMiniTicker', s: 'BTCUSDT', c: '42000.00', ... }
     if (message.e === '24hrMiniTicker') {
       const symbol = message.s?.toLowerCase();
       const price = parseFloat(message.c);
 
-      if (symbol && !isNaN(price) && SYMBOL_MAP[symbol]) {
-        priceService.updatePrice(SYMBOL_MAP[symbol], price, 'binance');
+      if (symbol && !isNaN(price) && SYMBOL_MAP[symbol] && this.onPrice) {
+        this.tickCount++;
+        this.onPrice({
+          symbol: SYMBOL_MAP[symbol],
+          price,
+          source: this.name,
+          timestamp: new Date(),
+        });
       }
     }
-  },
+  }
 
-  /**
-   * Schedule reconnection after disconnect
-   */
-  scheduleReconnect(): void {
-    if (!isRunning) return;
+  private scheduleReconnect(): void {
+    if (!this.running) return;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-    }
-
-    // Reconnect after 5 seconds
-    reconnectTimer = setTimeout(() => {
+    this.reconnectTimer = setTimeout(() => {
       logger.info('Attempting to reconnect to Binance...');
       this.connect();
     }, 5000);
-  },
+  }
+}
 
-  /**
-   * Get current connection status
-   */
-  isConnected(): boolean {
-    return ws?.readyState === WebSocket.OPEN;
-  },
-};
-
+export const binanceFeed = new BinanceFeed();
 export default binanceFeed;

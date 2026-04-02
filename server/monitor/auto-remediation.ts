@@ -10,6 +10,7 @@
 
 import { Router } from 'express';
 import { createLogger } from '../lib/logger';
+import { priceFeedManager } from '../services/price-feed-manager';
 
 const logger = createLogger('auto-remediation');
 const router = Router();
@@ -25,6 +26,35 @@ interface RemediationAction {
 }
 
 const SAFE_ACTIONS: RemediationAction[] = [
+    {
+        alertname: 'PriceFeedUnavailable',
+        description: 'Reconnect price feed providers and verify tick freshness',
+        handler: async () => {
+            const statusBefore = priceFeedManager.getStatus();
+            logger.info(
+                { activeProvider: statusBefore.activeProvider, tickAge: statusBefore.lastTickAge },
+                'PriceFeedUnavailable — triggering reconnect'
+            );
+
+            priceFeedManager.reconnect();
+
+            // Wait 10s then verify ticks resumed
+            await new Promise(resolve => setTimeout(resolve, 10_000));
+
+            const statusAfter = priceFeedManager.getStatus();
+            if (statusAfter.healthy) {
+                logger.info(
+                    { activeProvider: statusAfter.activeProvider, tickAge: statusAfter.lastTickAge },
+                    'Price feed recovered after auto-remediation'
+                );
+            } else {
+                logger.error(
+                    { activeProvider: statusAfter.activeProvider, tickAge: statusAfter.lastTickAge, escalation: statusAfter.escalationStage },
+                    'Price feed still unhealthy after auto-remediation — escalation in progress'
+                );
+            }
+        },
+    },
     {
         alertname: 'HighMemoryUsage',
         description: 'Trigger garbage collection if available',

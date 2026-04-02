@@ -9,7 +9,7 @@ metadata:
 data:
   alertmanager.yml: |
     # Alertmanager Configuration for KrystalineX
-    # Routes alerts to GoAlert webhook
+    # Routes alerts to GoAlert webhook + auto-remediation
 
     global:
       resolve_timeout: 5m
@@ -26,6 +26,14 @@ data:
       repeat_interval: 4h
 
       routes:
+        # Auto-remediation — fires FIRST, continues to GoAlert for visibility
+        - match:
+            alertname: PriceFeedUnavailable
+          receiver: 'auto-remediation'
+          group_wait: 10s
+          repeat_interval: 5m
+          continue: true
+
         # Critical alerts - immediate notification
         - match:
             severity: critical
@@ -46,6 +54,15 @@ data:
           receiver: 'goalert-webhook'
           group_wait: 1m
           repeat_interval: 4h
+
+        # Anomaly detector alerts — group by service for RCA correlation
+        - match:
+            source: anomaly-detector
+          receiver: 'goalert-webhook'
+          group_by: ['alertname', 'service']
+          group_wait: 30s
+          group_interval: 2m
+          repeat_interval: 1h
 
         # Security alerts - immediate
         - match:
@@ -87,6 +104,11 @@ data:
       - name: 'goalert-security'
         webhook_configs:
           - url: 'http://{{ include "krystalinex.fullname" . }}-goalert:8081/goalert/api/v2/generic/incoming?token={{ .Values.goalert.integrationTokens.security }}'
+            send_resolved: true
+
+      - name: 'auto-remediation'
+        webhook_configs:
+          - url: 'http://{{ include "krystalinex.fullname" . }}-server:5000/api/v1/monitor/webhook/remediation'
             send_resolved: true
 
       - name: 'ntfy-critical'

@@ -3,11 +3,17 @@
  * 
  * Provides /health (liveness) and /ready (readiness) endpoints
  * for container orchestration and load balancers.
+ * 
+ * /health is BUSINESS-AWARE: it checks whether fresh price data
+ * is flowing, not just whether the process is alive. This allows
+ * K8s to automatically restart the pod when the feed is dead but
+ * the process appears healthy.
  */
 
 import { Router, Request, Response } from 'express';
 import db from '../db';
 import { rabbitMQClient } from '../services/rabbitmq-client';
+import { priceFeedManager } from '../services/price-feed-manager';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
 
@@ -24,25 +30,44 @@ interface HealthStatus {
   checks?: {
     database?: { status: string; latencyMs?: number };
     rabbitmq?: { status: string };
+    priceFeed?: { status: string; activeProvider?: string; tickAge?: number };
   };
 }
 
 /**
  * GET /health
  * 
- * Liveness probe - returns 200 if the server is running.
- * Use this for container health checks.
- * Does NOT check external dependencies.
+ * Liveness probe — returns 200 if the server AND price feed are healthy.
+ * Returns 503 if price feed has been dead for >60s (all providers failed).
+ * K8s will restart the pod on repeated 503 responses.
  */
 router.get('/health', (req: Request, res: Response) => {
+  const feedAlive = priceFeedManager.isFeedAlive();
+  const feedStatus = priceFeedManager.getStatus();
+
   const status: HealthStatus = {
-    status: 'healthy',
+    status: feedAlive ? 'healthy' : 'unhealthy',
     timestamp: new Date().toISOString(),
     uptime: Math.floor((Date.now() - startTime) / 1000),
     version: process.env.npm_package_version || '1.0.0',
+    checks: {
+      priceFeed: {
+        status: feedAlive ? 'active' : 'stale',
+        activeProvider: feedStatus.activeProvider,
+        tickAge: feedStatus.lastTickAge,
+      },
+    },
   };
 
-  res.status(200).json(status);
+  // Allow a 2-minute grace period on startup before failing liveness
+  const uptimeMs = Date.now() - startTime;
+  const inGracePeriod = uptimeMs < 120_000;
+
+  if (!feedAlive && !inGracePeriod) {
+    res.status(503).json(status);
+  } else {
+    res.status(200).json(status);
+  }
 });
 
 /**
