@@ -86,6 +86,31 @@ export function backendHeaders(auth: BackendAuth): Record<string, string> {
 //  Client Auth — inbound API key verification (HTTP transport)
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Predefined roles with sensible tool-group defaults. */
+export type ClientRole = 'admin' | 'platform-engineer' | 'trader' | 'business-owner' | 'product';
+
+const ALL_TOOL_GROUPS = ['traces', 'metrics', 'logs', 'zk-proofs', 'system'] as const;
+export type ToolGroup = typeof ALL_TOOL_GROUPS[number];
+
+/**
+ * Role → allowed tool groups mapping.
+ *
+ * | Role              | Tools                              |
+ * |-------------------|------------------------------------|
+ * | admin             | all                                |
+ * | platform-engineer | all                                |
+ * | trader            | zk-proofs, system                  |
+ * | business-owner    | metrics, zk-proofs, system         |
+ * | product           | metrics, traces, system            |
+ */
+export const ROLE_TOOL_MAP: Record<ClientRole, readonly ToolGroup[]> = {
+  'admin':             ALL_TOOL_GROUPS,
+  'platform-engineer': ALL_TOOL_GROUPS,
+  'trader':            ['zk-proofs', 'system'],
+  'business-owner':    ['metrics', 'zk-proofs', 'system'],
+  'product':           ['metrics', 'traces', 'system'],
+};
+
 export interface ClientKey {
   /** Unique key identifier (for logging/auditing) */
   id: string;
@@ -93,8 +118,39 @@ export interface ClientKey {
   key: string;
   /** Human-readable description */
   description?: string;
-  /** Optional: restrict to specific tool groups */
-  allowedTools?: string[];
+  /** Role-based access control. Determines which tool groups are available. */
+  role?: ClientRole;
+  /** Explicit tool group override. Takes precedence over role if set. */
+  allowedTools?: ToolGroup[];
+}
+
+/**
+ * Resolve which tool groups a client key grants access to.
+ *
+ * Priority: explicit allowedTools > role mapping > all (for keys with no restrictions).
+ * If the server was started with --tools, the result is intersected with that global filter.
+ */
+export function resolveToolGroups(
+  clientKey: ClientKey | null,
+  globalFilter?: ToolGroup[],
+): ToolGroup[] {
+  let allowed: ToolGroup[];
+
+  if (clientKey?.allowedTools && clientKey.allowedTools.length > 0) {
+    allowed = clientKey.allowedTools;
+  } else if (clientKey?.role && ROLE_TOOL_MAP[clientKey.role]) {
+    allowed = [...ROLE_TOOL_MAP[clientKey.role]];
+  } else {
+    allowed = [...ALL_TOOL_GROUPS];
+  }
+
+  // Intersect with --tools global filter if present
+  if (globalFilter && globalFilter.length > 0) {
+    const globalSet = new Set(globalFilter);
+    allowed = allowed.filter(t => globalSet.has(t));
+  }
+
+  return allowed;
 }
 
 interface KeysFile {
@@ -117,8 +173,11 @@ interface KeysFile {
  * ```json
  * {
  *   "keys": [
- *     { "id": "dev-1", "key": "sk-...", "description": "Local dev" },
- *     { "id": "ci", "key": "sk-...", "allowedTools": ["traces", "metrics"] }
+ *     { "id": "dev-1", "key": "sk-...", "role": "admin", "description": "Local dev" },
+ *     { "id": "trader-app", "key": "sk-...", "role": "trader", "description": "Trading UI" },
+ *     { "id": "dashboard", "key": "sk-...", "role": "business-owner", "description": "Exec dashboard" },
+ *     { "id": "growth-bot", "key": "sk-...", "role": "product", "description": "Product analytics" },
+ *     { "id": "custom", "key": "sk-...", "allowedTools": ["traces", "metrics"], "description": "Custom scope" }
  *   ]
  * }
  * ```

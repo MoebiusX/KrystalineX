@@ -19,7 +19,8 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { loadConfig } from './config.js';
 import { createServer, VERSION } from './server.js';
-import { loadClientKeys, validateClientKey } from './auth.js';
+import { loadClientKeys, validateClientKey, resolveToolGroups } from './auth.js';
+import type { ClientKey, ToolGroup } from './auth.js';
 import type { ServerOptions } from './server.js';
 
 async function main(): Promise<void> {
@@ -59,7 +60,10 @@ async function main(): Promise<void> {
     const http = await import('node:http');
 
     // Session map: each MCP client gets its own server+transport pair
-    const sessions = new Map<string, { transport: InstanceType<typeof StreamableHTTPServerTransport> }>();
+    const sessions = new Map<string, {
+      transport: InstanceType<typeof StreamableHTTPServerTransport>;
+      clientKey?: ClientKey;
+    }>();
 
     const httpServer = http.createServer(async (req, res) => {
       // Health check — always open
@@ -70,6 +74,7 @@ async function main(): Promise<void> {
           server: 'otel-mcp-server',
           version: VERSION,
           auth: authEnabled ? 'enabled' : 'disabled',
+          rbac: authEnabled,
           tools: options.tools || ['traces', 'metrics', 'logs', 'zk-proofs', 'system'],
           sessions: sessions.size,
         }));
@@ -89,6 +94,7 @@ async function main(): Promise<void> {
       }
 
       // Client authentication
+      let authenticatedKey: ClientKey | undefined;
       if (authEnabled) {
         const authHeader = req.headers['authorization'] as string | undefined;
         const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
@@ -102,6 +108,7 @@ async function main(): Promise<void> {
           }));
           return;
         }
+        authenticatedKey = clientKey;
       }
 
       // Session-based routing: existing sessions vs new connections
@@ -121,14 +128,22 @@ async function main(): Promise<void> {
         return;
       }
 
-      // New session — create a fresh server+transport pair
+      // New session — create a role-scoped server+transport pair
+      const clientToolGroups = resolveToolGroups(
+        authenticatedKey || null,
+        options.tools as ToolGroup[] | undefined,
+      );
+      const sessionOptions: ServerOptions = { ...options, tools: clientToolGroups };
+
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid: string) => {
-          sessions.set(sid, { transport });
+          sessions.set(sid, { transport, clientKey: authenticatedKey });
+          const role = authenticatedKey?.role || 'unrestricted';
+          console.error(`  Session: ${sid.slice(0, 8)}… (${authenticatedKey?.id || 'anonymous'}, role=${role}, tools=${clientToolGroups.join(',')})`);
         },
       });
-      const sessionServer = createServer(config, options);
+      const sessionServer = createServer(config, sessionOptions);
       await sessionServer.connect(transport);
 
       transport.onclose = () => {

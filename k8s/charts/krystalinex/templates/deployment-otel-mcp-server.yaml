@@ -103,13 +103,39 @@ stringData:
         {
           "id": "copilot-agent",
           "key": "{{ .Values.otelMcpServer.auth.agentKey }}",
+          "role": "platform-engineer",
           "description": "GitHub Copilot / Claude Desktop agent"
         },
         {
           "id": "rca-agent",
           "key": "{{ .Values.otelMcpServer.auth.rcaKey }}",
+          "role": "platform-engineer",
           "description": "RCA analysis agent"
         }
+        {{- if .Values.otelMcpServer.auth.traderKey }},
+        {
+          "id": "trader-app",
+          "key": "{{ .Values.otelMcpServer.auth.traderKey }}",
+          "role": "trader",
+          "description": "Trading UI — ZK proofs and system health only"
+        }
+        {{- end }}
+        {{- if .Values.otelMcpServer.auth.businessKey }},
+        {
+          "id": "exec-dashboard",
+          "key": "{{ .Values.otelMcpServer.auth.businessKey }}",
+          "role": "business-owner",
+          "description": "Executive dashboard — metrics, proofs, health"
+        }
+        {{- end }}
+        {{- if .Values.otelMcpServer.auth.productKey }},
+        {
+          "id": "product-analytics",
+          "key": "{{ .Values.otelMcpServer.auth.productKey }}",
+          "role": "product",
+          "description": "Product analytics — metrics, traces, health"
+        }
+        {{- end }}
       ]
     }
 {{- end }}
