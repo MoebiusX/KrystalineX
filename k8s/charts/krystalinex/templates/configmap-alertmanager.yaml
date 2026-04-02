@@ -26,6 +26,14 @@ data:
       repeat_interval: 4h
 
       routes:
+        # NoTraffic self-healing — ping the site to generate traffic, then continue to GoAlert
+        - match:
+            alertname: NoTraffic
+          receiver: 'traffic-ping'
+          group_wait: 10s
+          repeat_interval: 5m
+          continue: true
+
         # Auto-remediation — fires FIRST, continues to GoAlert for visibility
         - match:
             alertname: PriceFeedUnavailable
@@ -110,6 +118,11 @@ data:
         webhook_configs:
           - url: 'http://{{ include "krystalinex.fullname" . }}-server:5000/api/v1/monitor/webhook/remediation'
             send_resolved: true
+
+      - name: 'traffic-ping'
+        webhook_configs:
+          - url: 'https://www.krystaline.io/'
+            send_resolved: false
 
       - name: 'ntfy-critical'
         webhook_configs:
