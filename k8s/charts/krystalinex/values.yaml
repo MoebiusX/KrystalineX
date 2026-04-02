@@ -15,7 +15,7 @@ server:
   replicaCount: 1
   image:
     repository: moebiusx/krystalinex-server
-    tag: v2.9.0
+    tag: v2.10.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
