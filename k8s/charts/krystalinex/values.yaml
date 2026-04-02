@@ -388,10 +388,9 @@ otelMcpServer:
   auth:
     agentKey: "sk-kx-copilot-mcp-2026"
     rcaKey: "sk-kx-rca-agent-2026"
-    # Role-scoped keys (optional — uncomment to enable)
-    # traderKey: "sk-kx-trader-2026"
-    # businessKey: "sk-kx-exec-2026"
-    # productKey: "sk-kx-product-2026"
+    traderKey: "sk-kx-trader-ab99dccc014edae17bba754abbdc338c"
+    businessKey: "sk-kx-business-owner-375cfd78d5d3c31c40882c87d9bae032"
+    productKey: "sk-kx-product-066eb5bc58c9bbec19109db12f71d3c8"
   resources:
     limits:
       cpu: 250m

@@ -1,15 +1,34 @@
 {
   "keys": [
     {
-      "id": "dev-local",
-      "key": "otel-mcp-dev-CHANGE-ME",
-      "description": "Local development key — replace before use"
+      "id": "admin",
+      "key": "sk-kx-admin-CHANGE-ME",
+      "role": "admin",
+      "description": "Full access — all 23 tools across all 5 groups"
     },
     {
-      "id": "ci-readonly",
-      "key": "otel-mcp-ci-CHANGE-ME",
-      "description": "CI pipeline — traces and metrics only",
-      "allowedTools": ["traces", "metrics"]
+      "id": "platform-engineer",
+      "key": "sk-kx-platform-engineer-CHANGE-ME",
+      "role": "platform-engineer",
+      "description": "SRE / DevOps — all traces, metrics, logs, proofs, system"
+    },
+    {
+      "id": "trader",
+      "key": "sk-kx-trader-CHANGE-ME",
+      "role": "trader",
+      "description": "Trading UI — ZK proofs and system health only"
+    },
+    {
+      "id": "business-owner",
+      "key": "sk-kx-business-owner-CHANGE-ME",
+      "role": "business-owner",
+      "description": "Executive dashboard — metrics, ZK proofs, system health"
+    },
+    {
+      "id": "product",
+      "key": "sk-kx-product-CHANGE-ME",
+      "role": "product",
+      "description": "Product analytics — metrics, traces, system health"
     }
   ]
 }
