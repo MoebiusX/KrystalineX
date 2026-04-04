@@ -179,6 +179,15 @@ data:
         scrape_interval: 30s
       {{- end }}
 
+      # Pushgateway — dashboard integrity monitor pushes metrics here
+      {{- if .Values.pushgateway.enabled }}
+      - job_name: 'pushgateway'
+        honor_labels: true
+        static_configs:
+          - targets: ['{{ include "krystalinex.fullname" . }}-pushgateway:9091']
+        scrape_interval: 15s
+      {{- end }}
+
   alerting-rules.yml: |
     # KrystalineX Prometheus Alerting Rules
     groups:
@@ -749,6 +758,8 @@ data:
           - alert: PodNotReady
             expr: |
               min_over_time(kube_pod_status_ready{condition="true", namespace="krystalinex"}[5m]) == 0
+              unless on(pod, namespace)
+              kube_pod_owner{owner_kind="Job", namespace="krystalinex"}
             for: 10m
             labels:
               severity: warning

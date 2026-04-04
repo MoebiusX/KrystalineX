@@ -648,6 +648,8 @@ groups:
       - alert: PodNotReady
         expr: |
           min_over_time(kube_pod_status_ready{condition="true", namespace="krystalinex"}[5m]) == 0
+          unless on(pod, namespace)
+          kube_pod_owner{owner_kind="Job", namespace="krystalinex"}
         for: 10m
         labels:
           severity: warning

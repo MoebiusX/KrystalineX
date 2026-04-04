@@ -1,0 +1,64 @@
+{{- if .Values.integrityMonitor.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-integrity-monitor
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: integrity-monitor
+spec:
+  schedule: "{{ .Values.integrityMonitor.schedule }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            {{- include "krystalinex.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: integrity-monitor
+        spec:
+          restartPolicy: OnFailure
+          volumes:
+            - name: scripts
+              configMap:
+                name: {{ include "krystalinex.fullname" . }}-integrity-scripts
+            - name: dashboards
+              configMap:
+                name: {{ include "krystalinex.fullname" . }}-grafana-dashboards
+          containers:
+            - name: integrity-monitor
+              image: "node:22-alpine"
+              command: ["node", "/scripts/dashboard-integrity-monitor.js", "--once", "--remote"]
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                - name: dashboards
+                  mountPath: /etc/dashboards
+              env:
+                - name: PUSHGATEWAY_URL
+                  value: "http://{{ include "krystalinex.fullname" . }}-pushgateway:9091"
+                - name: PROMETHEUS_URL
+                  value: "http://{{ include "krystalinex.fullname" . }}-prometheus:9090"
+                - name: LOKI_URL
+                  value: "http://{{ include "krystalinex.fullname" . }}-loki:3100"
+                - name: JAEGER_URL
+                  value: "http://{{ include "krystalinex.fullname" . }}-jaeger:16686"
+                - name: GRAFANA_URL
+                  value: "http://{{ include "krystalinex.fullname" . }}-grafana:3000"
+                - name: GRAFANA_USER
+                  value: "{{ .Values.grafana.adminUser | default "admin" }}"
+                - name: GRAFANA_PASSWORD
+                  value: "{{ .Values.grafana.adminPassword | default "admin" }}"
+                - name: SERVER_URL
+                  value: "http://{{ include "krystalinex.fullname" . }}-server:5000"
+              resources:
+                limits:
+                  cpu: {{ .Values.integrityMonitor.resources.limits.cpu }}
+                  memory: {{ .Values.integrityMonitor.resources.limits.memory }}
+                requests:
+                  cpu: {{ .Values.integrityMonitor.resources.requests.cpu }}
+                  memory: {{ .Values.integrityMonitor.resources.requests.memory }}
+{{- end }}
