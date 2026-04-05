@@ -51,7 +51,7 @@ spec:
                 - name: GRAFANA_USER
                   value: "{{ .Values.grafana.adminUser | default "admin" }}"
                 - name: GRAFANA_PASSWORD
-                  value: "{{ .Values.grafana.adminPassword | default "admin" }}"
+                  value: {{ .Values.secrets.grafanaAdminPassword | default "admin" | quote }}
                 - name: SERVER_URL
                   value: "http://{{ include "krystalinex.fullname" . }}-server:5000"
               resources:
