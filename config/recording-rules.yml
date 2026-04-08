@@ -1,0 +1,196 @@
+# ============================================
+# SLO Recording Rules — KrystalineX
+# Pre-computed metrics for SLO dashboards & burn-rate alerts
+# ============================================
+#
+# SLO Definitions:
+#   Availability: 99.9% of requests return non-5xx (30-day window)
+#   Latency:      95% of requests < 500ms, 99% < 2s (30-day window)
+#
+# Error budget (30 days):
+#   99.9% availability = 43.2 minutes of downtime allowed
+#
+groups:
+  # ============================================
+  # ERROR RATE RECORDING RULES
+  # ============================================
+  - name: slo:error_rates
+    interval: 30s
+    rules:
+      # 5-minute error ratio (for short-window burn rate)
+      # Outer "or vector(0)" ensures 0 when no traffic exists (not "No data")
+      - record: slo:http_requests:error_ratio_5m
+        expr: |
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[5m])) or vector(0))
+          /
+          (sum(rate(http_requests_total[5m])) > 0)
+          or vector(0)
+
+      # 30-minute error ratio
+      - record: slo:http_requests:error_ratio_30m
+        expr: |
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[30m])) or vector(0))
+          /
+          (sum(rate(http_requests_total[30m])) > 0)
+          or vector(0)
+
+      # 1-hour error ratio
+      - record: slo:http_requests:error_ratio_1h
+        expr: |
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[1h])) or vector(0))
+          /
+          (sum(rate(http_requests_total[1h])) > 0)
+          or vector(0)
+
+      # 2-hour error ratio
+      - record: slo:http_requests:error_ratio_2h
+        expr: |
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[2h])) or vector(0))
+          /
+          (sum(rate(http_requests_total[2h])) > 0)
+          or vector(0)
+
+      # 6-hour error ratio
+      - record: slo:http_requests:error_ratio_6h
+        expr: |
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[6h])) or vector(0))
+          /
+          (sum(rate(http_requests_total[6h])) > 0)
+          or vector(0)
+
+      # 1-day error ratio
+      - record: slo:http_requests:error_ratio_1d
+        expr: |
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[1d])) or vector(0))
+          /
+          (sum(rate(http_requests_total[1d])) > 0)
+          or vector(0)
+
+      # 3-day error ratio
+      - record: slo:http_requests:error_ratio_3d
+        expr: |
+          (sum(rate(http_request_errors_total{status_code=~"5.."}[3d])) or vector(0))
+          /
+          (sum(rate(http_requests_total[3d])) > 0)
+          or vector(0)
+
+  # ============================================
+  # LATENCY RECORDING RULES
+  # ============================================
+  - name: slo:latency
+    interval: 30s
+    rules:
+      # Fraction of requests faster than 500ms (latency SLO target)
+      - record: slo:http_request_duration:ratio_below_500ms_5m
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="0.5"}[5m]))
+          /
+          (sum(rate(http_request_duration_seconds_count[5m])) > 0)
+          or vector(1)
+
+      - record: slo:http_request_duration:ratio_below_500ms_1h
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="0.5"}[1h]))
+          /
+          (sum(rate(http_request_duration_seconds_count[1h])) > 0)
+          or vector(1)
+
+      - record: slo:http_request_duration:ratio_below_500ms_1d
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="0.5"}[1d]))
+          /
+          (sum(rate(http_request_duration_seconds_count[1d])) > 0)
+          or vector(1)
+
+      # Fraction of requests faster than 2s (latency P99 target)
+      - record: slo:http_request_duration:ratio_below_2s_5m
+        expr: |
+          sum(rate(http_request_duration_seconds_bucket{le="2"}[5m]))
+          /
+          (sum(rate(http_request_duration_seconds_count[5m])) > 0)
+          or vector(1)
+
+      # P95 and P99 quantiles
+      - record: slo:http_request_duration:p95_5m
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+      - record: slo:http_request_duration:p99_5m
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+      - record: slo:http_request_duration:p95_1h
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1h])) by (le))
+
+      - record: slo:http_request_duration:p99_1h
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[1h])) by (le))
+
+  # ============================================
+  # PROBE-BASED AVAILABILITY
+  # Detects total outages that request-based SLI misses
+  # (0 requests → 0 errors → false 100% availability)
+  # ============================================
+  - name: slo:probe_availability
+    interval: 30s
+    rules:
+      # Best-target uptime: max across pods of avg scrape success
+      # 1.0 = at least one pod was up the entire window
+      # 0.0 = ALL pods were down the entire window
+      # Default to 1 (healthy) when no probe data exists — absence of data
+      # should not penalize error budget. Error ratio handles 5xx errors.
+      - record: slo:server:probe_success_ratio_5m
+        expr: |
+          max(avg_over_time(up{job="krystalinex-server"}[5m]))
+          or vector(1)
+
+      - record: slo:server:probe_success_ratio_1h
+        expr: |
+          max(avg_over_time(up{job="krystalinex-server"}[1h]))
+          or vector(1)
+
+      - record: slo:server:probe_success_ratio_1d
+        expr: |
+          max(avg_over_time(up{job="krystalinex-server"}[1d]))
+          or vector(1)
+
+      # Composite availability = request_success × probe_success
+      # When probe has no data, it defaults to 1 (healthy).
+      # When error ratio has no data (no traffic), it defaults to 0 (no errors).
+      - record: slo:availability:composite_1h
+        expr: |
+          (1 - (slo:http_requests:error_ratio_1h or vector(0)))
+          *
+          (slo:server:probe_success_ratio_1h or vector(1))
+
+      - record: slo:availability:composite_1d
+        expr: |
+          (1 - (slo:http_requests:error_ratio_1d or vector(0)))
+          *
+          (slo:server:probe_success_ratio_1d or vector(1))
+
+  # ============================================
+  # ERROR BUDGET TRACKING
+  # ============================================
+  - name: slo:error_budget
+    interval: 1m
+    rules:
+      # Availability error budget remaining (1 = 100% budget left, 0 = exhausted)
+      # Uses composite availability (request + probe) to cover total outages
+      # SLO target = 0.999, so allowed error ratio = 0.001
+      - record: slo:availability:error_budget_remaining
+        expr: |
+          1 - (
+            (1 - (slo:availability:composite_1d or vector(1)))
+            / (1 - 0.999)
+          )
+
+      # Latency error budget remaining
+      # SLO target = 0.95 of requests under 500ms
+      - record: slo:latency:error_budget_remaining
+        expr: |
+          1 - (
+            (1 - slo:http_request_duration:ratio_below_500ms_1d)
+            / (1 - 0.95)
+          )

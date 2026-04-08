@@ -1,39 +1,64 @@
 # Production Dockerfile for server
-# Uses npm ci with --production for clean deps, but caches aggressively
+# Multi-stage build: compile TS in builder, run with plain node in production
+# Eliminates tsx/esbuild (and their Go binary CVEs) from the final image
 
-FROM node:20-alpine AS deps
+# Stage 1: Build
+FROM node:22-alpine AS builder
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies (native modules need python3/make/g++)
 RUN apk add --no-cache python3 make g++
 
-# Copy only package files first (better cache)
+# Copy package files and install ALL deps (need esbuild for compilation)
 COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
 
-# Install production dependencies only + nanoid (needed at runtime)
-RUN npm ci --omit=dev --legacy-peer-deps && \
-    npm install nanoid --legacy-peer-deps && \
-    npm cache clean --force
-
-# Final stage
-FROM node:20-alpine
-WORKDIR /app
-
-# Install runtime dependencies
-RUN apk add --no-cache curl && npm install -g tsx
-
-# Copy dependencies from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-
-# Copy source files (small, fast)
+# Copy source files needed for the build
 COPY server ./server
 COPY shared ./shared
-COPY drizzle.config.ts tsconfig.json ./
+COPY tsconfig.json ./
 
-# Security: non-root user
+# Bundle OTEL setup as separate entry (must load BEFORE main bundle for ESM hook registration)
+# Then bundle the main server with ./otel marked external (resolved at runtime)
+# Fix ESM extension: Node.js ESM requires explicit .js extension on imports
+RUN npx esbuild server/otel.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/otel.js && \
+    npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --external:./vite --external:./otel && \
+    sed -i 's|import "./otel"|import "./otel.js"|' dist/index.js
+
+# Now install production-only deps for the final image
+RUN rm -rf node_modules && \
+    npm ci --omit=dev --legacy-peer-deps && \
+    npm cache clean --force
+
+# Stage 2: Production
+FROM node:22-alpine
+WORKDIR /app
+
+# Security: non-root user (created before COPY --chown to avoid extra layer)
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
-    chown -R nodejs:nodejs /app
+    adduser -S nodejs -u 1001
+
+# Install runtime dependencies (curl for healthcheck)
+RUN apk add --no-cache curl
+
+# Create writable data directory for training store
+# Create symlink so esbuild bundle's __dirname-relative circuit paths resolve correctly
+# (esbuild bundles to /app/dist/index.js, code uses ../circuits/build → /app/circuits/build)
+RUN mkdir -p /app/data && chown nodejs:nodejs /app/data && \
+    ln -s /app/server/circuits /app/circuits
+
+# Copy built app and production node_modules (--chown avoids 237MB chown layer)
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+
+# Copy compiled circuit artifacts (wasm + zkey + verification keys)
+COPY --chown=nodejs:nodejs server/circuits/build/trade_integrity_js ./server/circuits/build/trade_integrity_js
+COPY --chown=nodejs:nodejs server/circuits/build/trade_integrity_final.zkey ./server/circuits/build/trade_integrity_final.zkey
+COPY --chown=nodejs:nodejs server/circuits/build/trade_integrity_verification_key.json ./server/circuits/build/trade_integrity_verification_key.json
+COPY --chown=nodejs:nodejs server/circuits/build/solvency_js ./server/circuits/build/solvency_js
+COPY --chown=nodejs:nodejs server/circuits/build/solvency_final.zkey ./server/circuits/build/solvency_final.zkey
+COPY --chown=nodejs:nodejs server/circuits/build/solvency_verification_key.json ./server/circuits/build/solvency_verification_key.json
 
 USER nodejs
 
@@ -42,6 +67,8 @@ ENV PORT=5000
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:5000/api/v1/health || exit 1
+    CMD curl -f http://localhost:5000/health || exit 1
 
-CMD ["tsx", "server/index.ts"]
+# --import loads OTEL before any other module, so auto-instrumentation hooks
+# (pg, http, amqplib) register before those modules are imported by the main bundle
+CMD ["node", "--import", "./dist/otel.js", "dist/index.js"]

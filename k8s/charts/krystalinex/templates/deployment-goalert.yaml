@@ -95,25 +95,6 @@ spec:
   selector:
     {{- include "krystalinex.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: goalert-db
-{{- if .Values.goalert.persistence.enabled }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: {{ include "krystalinex.fullname" . }}-goalert-db
-  labels:
-    {{- include "krystalinex.labels" . | nindent 4 }}
-    app.kubernetes.io/component: goalert-db
-spec:
-  accessModes:
-    - ReadWriteOnce
-  {{- if .Values.global.storageClass }}
-  storageClassName: {{ .Values.global.storageClass }}
-  {{- end }}
-  resources:
-    requests:
-      storage: {{ .Values.goalert.persistence.size }}
-{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -138,6 +119,25 @@ spec:
         - name: wait-for-db
           image: "postgres:17-alpine"
           command: ['sh', '-c', 'until pg_isready -h {{ include "krystalinex.fullname" . }}-goalert-db -p 5432 -U goalert; do echo waiting for goalert-db; sleep 2; done']
+        {{- if .Values.goalert.provision.enabled }}
+        - name: bootstrap-admin
+          image: "{{ .Values.goalert.image.repository }}:{{ .Values.goalert.image.tag }}"
+          command:
+            - sh
+            - -c
+            - |
+              echo "=== GoAlert Bootstrap: creating admin user + enabling basic auth ==="
+              goalert add-user --admin --user admin --pass "$GOALERT_ADMIN_PASS" 2>&1 && echo "Admin user created" || echo "Admin user already exists (OK)"
+              goalert set-config --data '{"Auth.BasicEnable": true, "Webhook.Enable": true}' 2>&1 && echo "Config set" || echo "Config set failed"
+              echo "=== Bootstrap complete ==="
+          env:
+            - name: GOALERT_DB_URL
+              value: {{ printf "postgres://goalert:%s@%s-goalert-db:5432/goalert?sslmode=disable" (.Values.secrets.goalertDbPassword | default "CHANGE_ME") (include "krystalinex.fullname" .) | quote }}
+            - name: GOALERT_DATA_ENCRYPTION_KEY
+              value: {{ .Values.secrets.goalertEncryptionKey | default "CHANGE_ME_GENERATE_KEY" | quote }}
+            - name: GOALERT_ADMIN_PASS
+              value: {{ required "goalert.provision.adminPassword must be set in values-secrets.yaml" .Values.goalert.provision.adminPassword | quote }}
+        {{- end }}
       containers:
         - name: goalert
           image: "{{ .Values.goalert.image.repository }}:{{ .Values.goalert.image.tag }}"
@@ -188,4 +188,35 @@ spec:
   selector:
     {{- include "krystalinex.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: goalert
+{{- if .Values.goalert.provision.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-goalert-provision
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: goalert-provision
+data:
+  README.md: |
+    # GoAlert Provisioning
+    
+    The bootstrap-admin init container automatically creates the admin user
+    and enables basic auth on every GoAlert pod startup.
+    
+    For full provisioning (carlos user, KrystalineX service, integration keys),
+    run the provision script from a machine with kubectl access:
+    
+      # Port-forward GoAlert
+      kubectl port-forward -n krystalinex svc/kx-krystalinex-goalert 18081:8081 --address=0.0.0.0
+    
+      # Run provisioning
+      GOALERT_URL="http://localhost:18081/goalert" \
+      GOALERT_REFERER="https://www.krystaline.io/goalert" \
+      GOALERT_EXEC="kubectl exec deploy/kx-krystalinex-goalert -n krystalinex -- goalert" \
+      ./scripts/provision-goalert.sh
+    
+    After provisioning, update values.yaml goalert.integrationTokens with the
+    output tokens, then re-deploy Alertmanager config.
+{{- end }}
 {{- end }}

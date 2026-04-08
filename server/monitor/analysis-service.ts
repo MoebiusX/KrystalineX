@@ -13,6 +13,7 @@ import type {
 } from './types';
 import { historyStore } from './history-store';
 import { metricsCorrelator, type CorrelatedMetrics } from './metrics-correlator';
+import { enrichFromTrace, buildRCAPrompt, type TraceContext } from './context-enricher';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
 
@@ -80,20 +81,47 @@ export class AnalysisService {
         }
 
         try {
-            // Fetch correlated metrics for context
-            let correlatedMetrics: CorrelatedMetrics | null = null;
+            // Gather full RCA context from the traceId
+            let traceCtx: TraceContext | null = null;
             try {
-                correlatedMetrics = await metricsCorrelator.correlate(
-                    anomaly.id,
-                    anomaly.service,
-                    new Date(anomaly.timestamp)
-                );
-                logger.debug({ hasMetrics: !!correlatedMetrics }, 'Metrics correlation result');
-            } catch (metricsError: any) {
-                logger.warn({ err: metricsError }, 'Metrics unavailable for analysis');
+                traceCtx = await enrichFromTrace(anomaly.traceId, {
+                    existingTrace: fullTrace,
+                    hint: {
+                        id: anomaly.id,
+                        deviation: anomaly.deviation,
+                        severity: anomaly.severity,
+                        expectedMeanMs: anomaly.expectedMean,
+                        expectedStdDevMs: anomaly.expectedStdDev,
+                    },
+                });
+                logger.info({
+                    traceId: anomaly.traceId,
+                    spans: traceCtx.trace?.totalSpans ?? 0,
+                    services: traceCtx.trace?.services?.length ?? 0,
+                    logs: traceCtx.logs.count,
+                    firingAlerts: traceCtx.alerts.firing.length,
+                    blastRadius: traceCtx.topology.blastRadius.length,
+                    hasZK: !!traceCtx.zkHealth,
+                }, 'RCA context enriched from traceId');
+            } catch (enrichError: any) {
+                logger.warn({ err: enrichError }, 'Context enrichment failed, falling back to basic metrics');
             }
 
-            const analysis = await this.callOllama(anomaly, fullTrace, correlatedMetrics);
+            // Fall back to basic metrics if enrichment failed
+            let correlatedMetrics: CorrelatedMetrics | null = null;
+            if (!traceCtx) {
+                try {
+                    correlatedMetrics = await metricsCorrelator.correlate(
+                        anomaly.id,
+                        anomaly.service,
+                        new Date(anomaly.timestamp)
+                    );
+                } catch (metricsError: any) {
+                    logger.warn({ err: metricsError }, 'Metrics unavailable for analysis');
+                }
+            }
+
+            const analysis = await this.callOllama(anomaly, fullTrace, correlatedMetrics, traceCtx);
 
             // Cache the result
             historyStore.addAnalysis(analysis);
@@ -111,13 +139,17 @@ export class AnalysisService {
     private async callOllama(
         anomaly: Anomaly,
         fullTrace?: JaegerTrace,
-        metrics?: CorrelatedMetrics | null
+        metrics?: CorrelatedMetrics | null,
+        traceCtx?: TraceContext | null
     ): Promise<AnalysisResponse> {
-        const prompt = this.buildPrompt(anomaly, fullTrace, metrics);
+        // Use enriched prompt if trace context is available, otherwise fall back
+        const prompt = traceCtx
+            ? buildRCAPrompt(traceCtx)
+            : this.buildPrompt(anomaly, fullTrace, metrics);
 
-        // Add 120-second timeout to accommodate model cold starts
+        // 300s timeout — F16 model on CPU takes ~4-5 minutes per generation
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000);
+        const timeoutId = setTimeout(() => controller.abort(), 300000);
 
         try {
             const response = await fetch(`${OLLAMA_URL}/api/generate`, {
@@ -160,7 +192,7 @@ export class AnalysisService {
         } catch (error: unknown) {
             clearTimeout(timeoutId);
             if (error instanceof Error && error.name === 'AbortError') {
-                throw new Error('Ollama request timed out after 120 seconds');
+                throw new Error('Ollama request timed out after 300 seconds');
             }
             throw error;
         }
@@ -197,9 +229,10 @@ ${metricsContext}
 ${traceContext}
 
 Based on the trace data AND correlated metrics, provide:
-1. A brief summary (1-2 sentences) of what likely caused this anomaly
-2. 2-3 possible root causes (consider resource utilization if metrics show issues)
-3. 2-3 actionable recommendations
+1. The top 1-2 spans responsible for most of the delay (cite service:operation and percentage)
+2. A brief summary (1-2 sentences) of what likely caused this anomaly
+3. 2-3 possible root causes (consider resource utilization if metrics show issues)
+4. 2-3 actionable recommendations
 
 Format your response as:
 SUMMARY: [your summary]
@@ -235,19 +268,28 @@ CONFIDENCE: [low/medium/high]`;
 
 
     /**
-     * Format trace context for the prompt
+     * Format trace context for the prompt — sorted by duration to highlight bottlenecks
      */
     private formatTraceContext(trace: JaegerTrace): string {
-        const spans = trace.spans.map(s => ({
-            service: trace.processes[s.processID]?.serviceName || 'unknown',
-            operation: s.operationName,
-            duration: (s.duration / 1000).toFixed(2) + 'ms'
-        }));
+        const rootSpan = trace.spans.reduce((longest, s) =>
+            s.duration > longest.duration ? s : longest, trace.spans[0]);
+        const totalDuration = rootSpan ? rootSpan.duration : 1;
 
-        return `## Trace Context
-The full trace contains ${spans.length} spans:
-${spans.slice(0, 10).map(s => `- ${s.service}: ${s.operation} (${s.duration})`).join('\n')}
-${spans.length > 10 ? `... and ${spans.length - 10} more spans` : ''}`;
+        const spans = trace.spans
+            .map(s => ({
+                service: trace.processes[s.processID]?.serviceName || 'unknown',
+                operation: s.operationName,
+                durationMs: (s.duration / 1000).toFixed(2),
+                pctOfTrace: ((s.duration / totalDuration) * 100).toFixed(1),
+            }))
+            .sort((a, b) => parseFloat(b.durationMs) - parseFloat(a.durationMs));
+
+        return `## Trace Span Breakdown (sorted by duration)
+The trace contains ${spans.length} spans. Top spans by duration:
+${spans.slice(0, 10).map(s => `- ${s.service}:${s.operation} ${s.durationMs}ms (${s.pctOfTrace}% of trace)`).join('\n')}
+${spans.length > 10 ? `... and ${spans.length - 10} more spans` : ''}
+
+Identify the top 1-2 spans responsible for the majority of the delay.`;
     }
 
     /**

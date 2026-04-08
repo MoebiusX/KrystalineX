@@ -35,16 +35,18 @@ spec:
               value: "true"
             - name: QUERY_BASE_PATH
               value: "/jaeger"
+            - name: MEMORY_MAX_TRACES
+              value: "5000"
           livenessProbe:
             httpGet:
               path: /
-              port: ui
+              port: admin
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /
-              port: ui
+              port: admin
             initialDelaySeconds: 10
             periodSeconds: 5
           resources:

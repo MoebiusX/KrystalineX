@@ -312,26 +312,30 @@ groups:
       # Circuit Breaker Open
       - alert: CircuitBreakerOpen
         expr: |
-          circuit_breaker_state{state="open"} == 1
+          circuit_breaker_state == 1
         for: 1m
         labels:
           severity: critical
           service: resilience
+          team: platform
         annotations:
-          summary: "Circuit breaker {{ $labels.name }} is OPEN"
-          description: "The {{ $labels.name }} circuit breaker has opened due to failures. Requests will fail fast."
+          summary: "Circuit breaker {{ $labels.service }} is OPEN"
+          description: "The {{ $labels.service }} circuit breaker has opened due to failures. Requests will fail fast."
+          runbook_url: "docs/operations/04_RUNBOOK.md#circuit-breaker"
 
       # Circuit Breaker Half-Open
       - alert: CircuitBreakerHalfOpen
         expr: |
-          circuit_breaker_state{state="half_open"} == 1
+          circuit_breaker_state == 2
         for: 5m
         labels:
           severity: warning
           service: resilience
+          team: platform
         annotations:
-          summary: "Circuit breaker {{ $labels.name }} is half-open"
-          description: "The {{ $labels.name }} circuit breaker is testing recovery"
+          summary: "Circuit breaker {{ $labels.service }} is half-open"
+          description: "The {{ $labels.service }} circuit breaker is testing recovery"
+          runbook_url: "docs/operations/04_RUNBOOK.md#circuit-breaker"
 
   # ============================================
   # SECURITY ALERTS
@@ -465,30 +469,203 @@ groups:
           description: "{{ $value }} high/critical security events in 10 minutes. Multiple attack vectors may be active."
 
   # ============================================
-  # SLA ALERTS
+  # SLO BURN RATE ALERTS (Multi-window)
+  # Google SRE approach: catch fast burns quickly, slow burns eventually
+  # SLO: 99.9% availability (error budget = 0.1%)
   # ============================================
-  - name: krystalinex.sla
+  - name: krystalinex.slo.availability
     rules:
-      # Availability SLA
-      - alert: AvailabilitySLABreach
+      # CRITICAL — 14.4x burn rate over 1h (exhausts budget in ~2 days)
+      # Short window (5m) confirms it's not a blip
+      - alert: SLOAvailabilityBurnRateCritical
         expr: |
-          (1 - (sum(rate(http_requests_total{status=~"5.."}[1h])) / sum(rate(http_requests_total[1h])))) < 0.999999
+          slo:http_requests:error_ratio_1h > (14.4 * 0.001)
+          and
+          slo:http_requests:error_ratio_5m > (14.4 * 0.001)
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+          slo: availability
+        annotations:
+          summary: "🔥 Availability SLO burn rate critical (14.4x)"
+          description: "Error rate {{ $value | humanizePercentage }} is burning error budget at 14.4x. Budget exhausted in ~2 days at this rate."
+          runbook_url: "https://docs.krystaline.io/runbooks/slo-availability"
+
+      # WARNING — 6x burn rate over 6h (exhausts budget in ~5 days)
+      - alert: SLOAvailabilityBurnRateHigh
+        expr: |
+          slo:http_requests:error_ratio_6h > (6 * 0.001)
+          and
+          slo:http_requests:error_ratio_30m > (6 * 0.001)
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+          slo: availability
+        annotations:
+          summary: "⚠️ Availability SLO burn rate high (6x)"
+          description: "Error rate {{ $value | humanizePercentage }} is burning error budget at 6x. Budget exhausted in ~5 days."
+          runbook_url: "https://docs.krystaline.io/runbooks/slo-availability"
+
+      # TICKET — 3x burn rate over 1d (exhausts budget in ~10 days)
+      - alert: SLOAvailabilityBurnRateElevated
+        expr: |
+          slo:http_requests:error_ratio_1d > (3 * 0.001)
+          and
+          slo:http_requests:error_ratio_2h > (3 * 0.001)
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+          slo: availability
+        annotations:
+          summary: "📋 Availability SLO burn rate elevated (3x)"
+          description: "Sustained error rate burning budget at 3x. Investigate non-urgently."
+
+      # INFO — 1x burn rate over 3d (on track to exhaust budget this month)
+      - alert: SLOAvailabilityBurnRateSlow
+        expr: |
+          slo:http_requests:error_ratio_3d > (1 * 0.001)
+          and
+          slo:http_requests:error_ratio_6h > (1 * 0.001)
+        for: 1h
+        labels:
+          severity: info
+          team: platform
+          slo: availability
+        annotations:
+          summary: "ℹ️ Availability error budget consumption trending"
+          description: "Error budget being consumed at 1x rate over 3 days."
+
+  # ============================================
+  # SLO BURN RATE ALERTS — LATENCY
+  # SLO: 95% of requests < 500ms
+  # ============================================
+  - name: krystalinex.slo.latency
+    rules:
+      # CRITICAL — Latency SLO fast burn
+      - alert: SLOLatencyBurnRateCritical
+        expr: |
+          (1 - slo:http_request_duration:ratio_below_500ms_1h) > (14.4 * 0.05)
+          and
+          (1 - slo:http_request_duration:ratio_below_500ms_5m) > (14.4 * 0.05)
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+          slo: latency
+        annotations:
+          summary: "🔥 Latency SLO burn rate critical"
+          description: "Only {{ $value | humanizePercentage }} of requests are under 500ms. Budget burning at 14.4x."
+          runbook_url: "https://docs.krystaline.io/runbooks/slo-latency"
+
+      # WARNING — Latency SLO slow burn
+      - alert: SLOLatencyBurnRateHigh
+        expr: |
+          (1 - slo:http_request_duration:ratio_below_500ms_1d) > (3 * 0.05)
+          and
+          (1 - slo:http_request_duration:ratio_below_500ms_1h) > (3 * 0.05)
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+          slo: latency
+        annotations:
+          summary: "⚠️ Latency SLO burn rate elevated"
+          description: "Sustained slow requests burning latency error budget at 3x."
+
+  # ============================================
+  # REDIS ALERTS
+  # ============================================
+  - name: krystalinex.redis
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Redis instance is down"
+          description: "Redis has been unreachable for more than 1 minute. Caching layer is offline."
+
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis memory usage above 85%"
+          description: "Redis is using {{ $value | humanizePercentage }} of max memory. Eviction policy may trigger."
+
+      - alert: RedisConnectedClientsHigh
+        expr: redis_connected_clients > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis has {{ $value }} connected clients"
+          description: "Unusually high number of Redis client connections. Check for connection leaks."
+
+      - alert: RedisKeyEviction
+        expr: rate(redis_evicted_keys_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Redis is evicting keys"
+          description: "Redis is actively evicting keys due to memory pressure ({{ $value }}/s)."
+
+  # ============================================
+  # CONTAINER HEALTH ALERTS
+  # ============================================
+  - name: krystalinex.container_health
+    rules:
+      - alert: ContainerCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total[15m]) * 60 * 15 > 3
         for: 5m
         labels:
           severity: critical
-          service: sla
+          team: platform
         annotations:
-          summary: "Availability SLA at risk"
-          description: "Current availability is {{ $value | humanizePercentage }} (SLA: 99.9%)"
+          summary: "Container {{ $labels.container }} is crash-looping"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} has restarted {{ $value | humanize }} times in the last 15 minutes."
 
-      # Latency SLA
-      - alert: LatencySLABreach
+      - alert: ContainerOOMKilled
+        expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Container {{ $labels.container }} was OOM killed"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} was terminated due to OOM. Consider increasing memory limits."
+
+      - alert: PodNotReady
         expr: |
-          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[1h])) by (le)) > 0.5
+          (min_over_time(kube_pod_status_ready{condition="true", namespace="krystalinex"}[5m]) == 0)
+          and on(pod, namespace)
+          (kube_pod_status_phase{phase="Running", namespace="krystalinex"} == 1)
         for: 10m
         labels:
           severity: warning
-          service: sla
+          team: platform
         annotations:
-          summary: "Latency SLA at risk"
-          description: "P95 latency is {{ $value | humanizeDuration }} (SLA: 500ms)"
+          summary: "Pod {{ $labels.pod }} has been not ready for 10m"
+          description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state for more than 10 minutes."
+
+      - alert: DeploymentReplicasMismatch
+        expr: |
+          kube_deployment_spec_replicas{namespace="krystalinex"}
+            != kube_deployment_status_ready_replicas{namespace="krystalinex"}
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Deployment {{ $labels.deployment }} replica mismatch"
+          description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} ready replicas vs desired."

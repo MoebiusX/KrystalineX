@@ -4,11 +4,7 @@
 global:
   imageRegistry: ""
   imagePullSecrets: []
-  storageClass: ""
-
-# Enable secret creation (for local dev)
-secrets:
-  create: true
+  storageClass: "local-storage"
 
 # =============================================================================
 # CORE APPLICATION SERVICES
@@ -18,19 +14,19 @@ server:
   enabled: true
   replicaCount: 1
   image:
-    repository: 192.168.1.32:5000/krystalinex/server
-    tag: v2.0.0
+    repository: moebiusx/krystalinex-server
+    tag: v3.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
     port: 5000
   resources:
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: "1"
+      memory: 1536Mi
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 250m
+      memory: 768Mi
   # Horizontal Pod Autoscaler configuration
   autoscaling:
     enabled: false
@@ -44,24 +40,33 @@ server:
   # These will be injected from secrets
   envFromSecrets:
     - name: krystalinex-secrets
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 5000
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 18
   livenessProbe:
     httpGet:
       path: /health
       port: 5000
-    initialDelaySeconds: 60
     periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
   readinessProbe:
     httpGet:
       path: /ready
       port: 5000
-    initialDelaySeconds: 30
+    timeoutSeconds: 3
     periodSeconds: 5
+    failureThreshold: 3
 
 paymentProcessor:
   enabled: true
   replicaCount: 1
   image:
-    repository: 192.168.1.32:5000/krystalinex/payment-processor
+    repository: moebiusx/krystalinex-payment-processor
     tag: v2.0.0
     pullPolicy: IfNotPresent
   service:
@@ -91,8 +96,8 @@ frontend:
   enabled: true
   replicaCount: 1
   image:
-    repository: 192.168.1.32:5000/krystalinex/frontend
-    tag: v2.0.0
+    repository: moebiusx/krystalinex-frontend
+    tag: v3.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -131,18 +136,7 @@ postgresql:
         memory: 256Mi
 
 kongPostgresql:
-  enabled: true
-  auth:
-    username: kong
-    database: kong
-    existingSecret: krystalinex-kong-secrets
-    secretKeys:
-      adminPasswordKey: postgres-password
-      userPasswordKey: password
-  primary:
-    persistence:
-      enabled: true
-      size: 5Gi
+  enabled: false  # DB-less mode — declarative config via ConfigMap
 
 rabbitmq:
   enabled: true
@@ -163,6 +157,66 @@ rabbitmq:
   metrics:
     enabled: true
 
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+  maxmemory: "256mb"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+postgresExporter:
+  enabled: true
+  image:
+    repository: prometheuscommunity/postgres-exporter
+    tag: latest
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+
+goalert:
+  enabled: true
+  image:
+    repository: goalert/goalert
+    tag: latest
+  persistence:
+    enabled: true
+    size: 5Gi
+  provision:
+    enabled: true
+    # Passwords must be set in values-secrets.yaml (never commit real passwords)
+    adminPassword: ""
+    carlosPassword: ""
+  integrationTokens:
+    general: "99f40a5f-b3dc-43ae-8dc3-1ec0ea77ae14"
+    critical: "8d5aa492-5110-48c8-ba7a-f751eaed9fb5"
+    security: "2f5a2fa6-338b-41fe-9dee-e1197e3a0a4c"
+
+alertmanager:
+  enabled: true
+  image:
+    repository: prom/alertmanager
+    tag: latest
+  persistence:
+    enabled: false
+    size: 5Gi
+
+nodeExporter:
+  enabled: true
+  image:
+    repository: prom/node-exporter
+    tag: latest
+
 # =============================================================================
 # OBSERVABILITY STACK
 # =============================================================================
@@ -181,7 +235,7 @@ jaeger:
   resources:
     limits:
       cpu: 1000m
-      memory: 2Gi
+      memory: 3Gi
     requests:
       cpu: 100m
       memory: 1Gi
@@ -199,11 +253,11 @@ otelCollector:
     existingConfigMap: otel-collector-config
   resources:
     limits:
-      cpu: 200m
-      memory: 256Mi
+      cpu: 500m
+      memory: 512Mi
     requests:
-      cpu: 50m
-      memory: 128Mi
+      cpu: 100m
+      memory: 256Mi
 
 prometheus:
   enabled: true
@@ -225,7 +279,7 @@ prometheus:
       memory: 256Mi
 
 loki:
-  enabled: false
+  enabled: true
   image:
     repository: grafana/loki
     tag: "3.0.0"
@@ -244,7 +298,7 @@ loki:
       memory: 256Mi
 
 promtail:
-  enabled: false
+  enabled: true
   image:
     repository: grafana/promtail
     tag: "3.0.0"
@@ -262,27 +316,23 @@ promtail:
 
 kong:
   enabled: true
+  replicaCount: 1
   image:
-    repository: kong/kong-gateway
-    tag: latest
+    repository: kong
+    tag: "3.9"
+    pullPolicy: IfNotPresent
   service:
-    type: LoadBalancer  # For external access
+    type: ClusterIP
     ports:
       proxy: 8000
-      proxySSL: 8443
       admin: 8001
-      manager: 8002
-  env:
-    database: postgres
-    pg_host: "{{ .Release.Name }}-kongdatabase-postgresql"
-    pg_user: kong
   resources:
     limits:
       cpu: 500m
-      memory: 512Mi
+      memory: 2Gi
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 512Mi
 
 # =============================================================================
 # OPTIONAL / DEV-ONLY SERVICES
@@ -308,7 +358,7 @@ grafana:
       memory: 256Mi
 
 ollama:
-  enabled: false  # Disabled by default, enable for AI trace analysis
+  enabled: true  # Enabled for AI trace analysis
   image:
     repository: ollama/ollama
     tag: latest
@@ -326,6 +376,47 @@ ollama:
       cpu: 500m
       memory: 4Gi
 
+otelMcpServer:
+  enabled: true
+  image:
+    repository: moebiusx/otel-mcp-server
+    tag: v2.0.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3001
+  timeoutMs: "15000"
+  auth:
+    agentKey: "sk-kx-copilot-mcp-2026"
+    rcaKey: "sk-kx-rca-agent-2026"
+    traderKey: "sk-kx-trader-ab99dccc014edae17bba754abbdc338c"
+    businessKey: "sk-kx-business-owner-375cfd78d5d3c31c40882c87d9bae032"
+    productKey: "sk-kx-product-066eb5bc58c9bbec19109db12f71d3c8"
+  resources:
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+bayesianService:
+  enabled: true
+  image:
+    repository: moebiusx/bayesian-service
+    tag: v2.0.0
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8100
+  resources:
+    limits:
+      cpu: "1"
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
 maildev:
   enabled: true  # Dev SMTP server
   image:
@@ -336,6 +427,33 @@ maildev:
     ports:
       web: 1080
       smtp: 1025
+
+pushgateway:
+  enabled: true  # Receives metrics from dashboard integrity monitor
+  image:
+    repository: prom/pushgateway
+    tag: v1.9.0
+  service:
+    type: ClusterIP
+    port: 9091
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+integrityMonitor:
+  enabled: true  # CronJob: synthetic traffic + dashboard integrity scoring
+  schedule: "*/2 * * * *"  # Every 2 minutes
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
 
 kubeStateMetrics:
   enabled: true
@@ -348,16 +466,16 @@ kubeStateMetrics:
 # =============================================================================
 
 networkPolicy:
-  enabled: true
-  # Default deny all ingress, allow specific pod-to-pod communication
+  enabled: false
+  # TODO: Re-enable after adding ingress rules for PostgreSQL, RabbitMQ, Redis, Grafana, Jaeger, GoAlert-DB
 
 ingress:
   enabled: true
-  className: kong  # or nginx
+  className: nginx
   annotations:
     kubernetes.io/tls-acme: "true"
   hosts:
-    - host: krystalinex.local
+    - host: www.krystaline.io
       paths:
         - path: /
           pathType: Prefix
@@ -365,6 +483,18 @@ ingress:
         - path: /api
           pathType: Prefix
           service: server
+        - path: /grafana
+          pathType: Prefix
+          service: grafana
+        - path: /jaeger
+          pathType: Prefix
+          service: jaeger
+        - path: /prometheus
+          pathType: Prefix
+          service: prometheus
+        - path: /alertmanager
+          pathType: Prefix
+          service: alertmanager
   tls: []
   #  - secretName: krystalinex-tls
   #    hosts:

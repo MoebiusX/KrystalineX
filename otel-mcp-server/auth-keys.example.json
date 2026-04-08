@@ -1,0 +1,15 @@
+{
+  "keys": [
+    {
+      "id": "dev-local",
+      "key": "otel-mcp-dev-CHANGE-ME",
+      "description": "Local development key — replace before use"
+    },
+    {
+      "id": "ci-readonly",
+      "key": "otel-mcp-ci-CHANGE-ME",
+      "description": "CI pipeline — traces and metrics only",
+      "allowedTools": ["traces", "metrics"]
+    }
+  ]
+}

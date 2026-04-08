@@ -1,168 +1,153 @@
-# Krystaline Exchange - AI-Powered Observability Platform
+# KrystalineX
 
-Institutional-grade crypto exchange platform with OTEL tracing, anomaly detection, and AI-driven diagnostics.
+**What happens when you combine a SIFI messaging platform team's engineering discipline with 2026's state‑of‑the‑art AI‑powered observability?**
 
-An **institutional-grade cryptocurrency exchange platform** that uses **Statistical Anomaly Detection + LLMs to extract maximum value from observability signals**. Combines OpenTelemetry distributed tracing, adaptive anomaly detection, and AI-powered analysis to automatically identify, diagnose, and explain performance issues.
+KrystalineX is a production-grade crypto exchange that answers that question. Every trade — from browser click to order matcher decision — is captured in a distributed trace, evaluated by a statistical anomaly engine, diagnosed by a fine-tuned LLM, and verified by zero-knowledge proofs. When something breaks, the system heals itself before a human even notices.
 
-**License:** Apache-2.0
+This is not a dashboard of mock data. It is a **live, deployed, self-healing financial platform** running on Kubernetes at [krystaline.io](https://www.krystaline.io).
 
-## Quick Start
+### By the numbers
 
-```bash
-# Start all services
-npm run dev
+| Metric | Value |
+|--------|-------|
+| Distributed traces | **17+ spans** per trade, full W3C context propagation over RabbitMQ |
+| Anomaly detection | **168 time buckets** (7d × 24h), Welford's online algorithm, adaptive percentile thresholds |
+| AI diagnosis | **LoRA‑tuned Llama 3.2:1B**, real‑time streaming analysis with structured output |
+| Bayesian inference | **Hierarchical PyMC model** — uncertainty‑aware root‑cause ranking with confidence scores |
+| Alerting | **85 rules** across 18 groups, multi‑channel escalation (GoAlert SMS/voice, ntfy push, email) |
+| Self‑healing | **4‑stage escalation ladder** — reconnect → failover → full restart → K8s pod replacement |
+| Cryptographic proofs | **zk‑SNARK** trade integrity (5‑input Poseidon commitment) + solvency proofs |
+| Test coverage | **940+ tests** (Vitest unit + Playwright E2E) |
+| Infrastructure | **22 services** orchestrated via Helm on bare‑metal Kubernetes |
 
-# Clean restart (kills all processes, restarts Docker + app)
-scripts\restart.bat
-```
+**License:** Apache‑2.0 · **Live:** [krystaline.io](https://www.krystaline.io)
 
-**Open**: http://localhost:5173
+---
 
-## What This Demo Shows
-
-### Full Distributed Trace (17 spans)
-```
-kx-wallet: order.submit.client             ← Browser starts trade
-├── kx-wallet: HTTP POST                   ← Fetch request
-│   └── api-gateway: kong                  ← Kong Gateway (routes + plugins)
-│       └── api-gateway: kong.balancer
-│           └── kx-exchange: POST          ← Exchange API handler
-│               ├── kx-exchange: publish orders      ← RabbitMQ publish
-│               │   └── kx-exchange: publish <default>
-│               │       └── kx-matcher: order.match  ← Consumer processes
-│               │           └── kx-matcher: order.response
-│               └── kx-exchange: payment_response process  ← Response received
-└── kx-wallet: order.response.received     ← Browser receives FILLED
-```
-
-### Multi-User Transfers
-```
-kx-wallet: transfer.submit.client          ← Browser starts transfer
-├── kx-wallet: HTTP POST                   ← Fetch request
-│   └── api-gateway: kong → kx-exchange: btc.transfer
-└── kx-wallet: transfer.response.received
-```
-
-### Services & OTEL Names
-
-| Service | URL | OTEL Service Name |
-|---------|-----|-------------------|
-| Krystaline Wallet (Browser) | http://localhost:5173 | `kx-wallet` |
-| Krystaline Exchange API (Server) | http://localhost:5000 | `kx-exchange` |
-| Krystaline Matcher (Processor) | RabbitMQ consumer | `kx-matcher` |
-| Kong Gateway | http://localhost:8000 | `api-gateway` |
-| Jaeger UI | http://localhost:16686 | - |
-| RabbitMQ | http://localhost:15672 | - |
-| Prometheus | http://localhost:9090 | - |
-
-### Metrics Endpoints
-
-| Metric Source | URL | Description |
-|---------------|-----|-------------|
-| Exchange API | http://localhost:5000/metrics | Application metrics (requests, orders, latency) |
-| RabbitMQ | http://localhost:15692/metrics | Queue depth, message rates, connections |
-| PostgreSQL (App) | http://localhost:9187/metrics | Database connections, query stats |
-| PostgreSQL (Kong) | http://localhost:9188/metrics | Kong database metrics |
-| Node Exporter | http://localhost:9100/metrics | OS metrics (CPU, memory, disk, network) |
+---
 
 ## Architecture
 
+```text
+  Browser (React 18 + OTEL SDK)
+       ↓ HTTP + spans
+    Kong API Gateway ─────────────────────────────────┐
+       ↓ proxy + W3C context                          │
+  Exchange API (Node/Express) ──→ PostgreSQL           │
+  (auth · orders · wallets · monitoring)               │
+       ↓ publish                                       │
+    RabbitMQ (traceparent in headers) ──→ Order Matcher ──→ zk‑SNARK proof gen
+       ↓                                     ↓
+    OTEL Collector                     order response + proof
+       ↓
+  ┌────┴──────────────────────────┐
+  │  Jaeger (traces)              │
+  │  Prometheus (metrics)         │ ──→ Grafana (52‑panel unified dashboard)
+  │  Loki (logs)                  │
+  └───────────────────────────────┘
+       ↓
+  Anomaly Detector (Welford's algorithm, 168 time buckets)
+       ↓ SEV 1‑5 classification
+  Stream Analyzer (LoRA‑tuned Llama 3.2:1B via Ollama)
+       ↓ structured diagnosis
+  ┌────┴──────────────────────────┐
+  │  Alertmanager (85 rules)      │ ──→ GoAlert (SMS/voice) · ntfy (push) · email
+  │  Bayesian Service (PyMC)      │ ──→ probabilistic root‑cause ranking
+  │  Auto‑Remediation Engine      │ ──→ self‑healing (reconnect → failover → restart)
+  └───────────────────────────────┘
 ```
-Browser (kx-wallet)
-    ↓ HTTP POST /api/orders (or /api/transfer)
-Kong Gateway (api-gateway)
-    ↓
-Krystaline Exchange API (kx-exchange)
-    ↓ RabbitMQ publish (with trace context)
-Order Matcher (order-matcher)
-    ↓ Execute trade
-    ↓ RabbitMQ response (with parent context)
-Exchange API (update wallet)
-    ↓
-Browser (order.response.received)
+
+All services emit OpenTelemetry spans and metrics. Traces carry W3C context through
+RabbitMQ headers, enabling full trade‑path reconstruction from browser to matcher.
+
+---
+
+## What makes this different
+
+### 1. Observability is not bolted on — it IS the architecture
+
+Every component is instrumented from day one. The OTEL Collector ingests spans, metrics,
+and logs from all services. Traces flow through RabbitMQ message headers. The Grafana
+dashboard validates itself automatically (52 panels, 4 validation dimensions, tiered
+criticality).
+
+### 2. AI‑powered diagnosis, not just detection
+
+When the anomaly detector flags a latency spike (SEV 1‑5 via adaptive percentile
+thresholds), a **fine‑tuned Llama 3.2:1B** model streams a structured root‑cause analysis
+in real time — `SUMMARY / CAUSES / RECOMMENDATIONS / CONFIDENCE`. A **hierarchical
+Bayesian model** (PyMC) independently produces uncertainty‑aware probability rankings
+across the service dependency graph.
+
+### 3. Self‑healing closed‑loop control
+
+The system doesn't just detect and alert — it **remediates**:
+
+| Stage | Trigger | Action |
+|-------|---------|--------|
+| 1 — Soft heal | Feed stale 15s | Reconnect WebSocket |
+| 2 — Failover | Feed stale 30s | Switch to secondary provider (CoinGecko) |
+| 3 — Full reconnect | Feed stale 45s | Reconnect all providers |
+| 4 — Pod restart | Feed stale 60s | Business‑aware liveness probe fails → K8s restarts pod |
+
+Alertmanager webhooks trigger remediation actions automatically. The `NoTraffic` alert
+pings the site to generate traffic, auto‑resolving itself.
+
+### 4. Cryptographic verification, not trust
+
+zk‑SNARK circuits produce tamper‑proof trade commitments (price, quantity, user,
+timestamp, trace ID) with ~680 constraints. Solvency proofs demonstrate reserves exceed
+liabilities. Verification is public — no trust required.
+
+### 5. Production Kubernetes, not docker‑compose demos
+
+22 services on bare‑metal K8s via Helm charts. GoAlert on‑call with Twilio SMS/voice
+escalation. Prometheus with 85 alert rules across 18 groups. Persistent volumes, network
+policies, HPA autoscaling. Not a toy.
+
+---
+
+## Quick start
+
+```bash
+npm install --legacy-peer-deps
+npm run dev          # launches full stack (Docker infra + Node services)
 ```
 
-## Features
+Browse to ➜ <http://localhost:5173>
 
-### Trading
-- **Dark themed** crypto trading UI
-- **BTC/USD trading** with simulated price (~$42K range)
-- **BUY/SELL orders** with fill price and slippage
-- **Real-time wallet** balance updates
+For production K8s deployment see the [deployment guide](docs/operations/02_DEPLOYMENT_K8S.md).
 
-### Authentication
-- **Email-based registration** with verification codes
-- **JWT authentication** with refresh tokens
-- **Session management** with secure logout
-- **Optional 2FA** with TOTP support
+---
 
-### Tracing
-- **17 spans** for order flow
-- **4 services** in distributed trace
-- **Context propagation** through RabbitMQ
-- **Client-side spans** showing response processing
+## Technical stack
 
-### Monitoring & Anomaly Detection
-- **Trace duration anomalies** - Automatic detection of slow operations
-- **Amount anomaly detection** - Whale transaction monitoring (pluggable)
-  - Enable: `ENABLE_AMOUNT_ANOMALY_DETECTION=true`
-  - Thresholds: SEV 5 (3σ) → SEV 1 (7σ) for 6-order-of-magnitude detection
-  - Passive logging with 🐋 WHALE ALERT
+| Layer | Technologies |
+|-------|-------------|
+| **Frontend** | React 18, TypeScript, Vite, TailwindCSS, Radix UI, Wouter |
+| **Backend** | Node.js, Express, TypeScript, PostgreSQL (raw pg + Drizzle schema) |
+| **Messaging** | RabbitMQ with W3C trace context propagation |
+| **Gateway** | Kong with OpenTelemetry plugin |
+| **Observability** | OTEL SDK + Collector, Jaeger, Prometheus, Loki, Grafana, Alertmanager |
+| **Alerting** | GoAlert (SMS/voice via Twilio), ntfy (push), email |
+| **AI / ML** | Llama 3.2:1B (LoRA fine‑tuned), PyMC Bayesian service, Ollama |
+| **Cryptography** | Circom zk‑SNARK circuits, snarkjs |
+| **Testing** | Vitest (940+ unit), Playwright (27 E2E scenarios) |
+| **Infrastructure** | Helm charts, bare‑metal K8s, Docker Compose for local dev |
 
-### AI-Powered Analysis
-- **LLM trace analysis** - Automatic root cause identification for anomalies
-- **Context-aware diagnostics** - Analyzes full trace context, span attributes, and timing
-- **Actionable recommendations** - Suggests specific fixes, not just symptoms
-- **Training data collection** - Human feedback loop for continuous improvement
-- **Fine-tuning ready** - Export training examples as JSONL for model optimization
+---
 
-## API Endpoints
+## Documentation
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/auth/register` | POST | Register new user |
-| `/api/auth/login` | POST | Login with email/password |
-| `/api/auth/verify` | POST | Verify email with code |
-| `/api/wallet` | GET | Get authenticated user's wallet |
-| `/api/orders` | POST | Submit trade order |
-| `/api/orders` | GET | Get user's order history |
-| `/api/transfers` | POST | Transfer crypto to another user |
-| `/api/price` | GET | Current BTC price |
-| `/api/monitor/health` | GET | System health status |
-| `/api/monitor/anomalies` | GET | Active trace anomalies |
-| `/api/monitor/amount-anomalies` | GET | Active whale anomalies |
-
-## Testing
-
-### Manual Test - Trading
-1. Go to http://localhost:5173
-2. Register a new account or login
-3. Verify your email (check MailDev at http://localhost:1080)
-4. Enter BTC amount to trade
-5. Click BUY or SELL
-6. Check Jaeger at http://localhost:16686 → service `kx-wallet` or `kx-exchange`
-
-### Manual Test - Transfer
-1. Register a second account
-2. Navigate to Transfer page
-3. Enter recipient's wallet address (`kx1...`)
-4. Enter amount and confirm
-5. Verify balance updates for both users
-
-## Technical Stack
-
-- **Frontend**: React 18, TypeScript, Vite, TailwindCSS
-- **Backend**: Express.js, TypeScript
-- **Messaging**: RabbitMQ with W3C trace context propagation
-- **Gateway**: Kong Gateway with OpenTelemetry plugin
-- **Tracing**: OpenTelemetry SDK (browser + Node.js)
-- **Visualization**: Jaeger
-
-## Scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development environment |
-| `scripts\restart.bat` | Clean restart (Docker + app) |
-| `npm run test:e2e` | Run E2E tests |
-| `npm run build` | Build for production |
+| Guide | Description |
+|-------|-------------|
+| **[Demo Walkthrough](docs/product/03_DEMO_WALKTHROUGH.md)** | 15‑minute guided tour of the platform |
+| **[Architecture](docs/architecture/01_ARCHITECTURE.md)** | System design, data flow, component interactions |
+| **[Observability Whitepaper](docs/OBSERVABILITY_WHITEPAPER.md)** | Philosophy, implementation, mathematical foundations |
+| **[Anomaly Detection Design](docs/observability/02_ANOMALY_DETECTION_DESIGN.md)** | Welford's algorithm, time buckets, adaptive thresholds |
+| **[Bayesian Inference](docs/observability/05_BAYESIAN_INFERENCE.md)** | Hierarchical models, dependency‑aware RCA |
+| **[Fine‑Tuning Guide](docs/observability/04_FINE_TUNING.md)** | LoRA training pipeline, synthetic data generation |
+| **[K8s Deployment](docs/operations/02_DEPLOYMENT_K8S.md)** | Helm charts, bare‑metal setup, production config |
+| **[Runbook](docs/operations/04_RUNBOOK.md)** | Operational procedures, incident response |
+| **[GoAlert Setup](docs/operations/GOALERT_SETUP.md)** | On‑call schedules, Twilio SMS/voice, provisioning |
+| **[User Journey](docs/product/02_USER_JOURNEY.md)** | End‑to‑end user experience across all phases |

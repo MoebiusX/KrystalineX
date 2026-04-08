@@ -7,11 +7,14 @@ import { TradeForm } from "@/components/trade-form";
 import { TransferForm } from "@/components/transfer-form";
 import { TraceViewer } from "@/components/trace-viewer";
 import { formatTimeAgo } from "@/lib/utils";
+import { createLogger } from "@/lib/logger";
 import { Bitcoin, TrendingUp, Wallet, ArrowUpRight, ArrowDownRight, Send, ArrowRightLeft, Sparkles, X, CheckCircle2, Eye, Zap, DollarSign, CreditCard, RefreshCw } from "lucide-react";
 import type { Order, Transfer } from "@shared/schema";
 import Layout from "@/components/Layout";
 import { useLocation, useSearch } from "wouter";
 import { getJaegerTraceUrl } from "@/lib/trace-utils";
+
+const log = createLogger('Dashboard');
 
 // Types for portfolio
 interface WalletData {
@@ -82,6 +85,7 @@ export default function Dashboard() {
   const [hasCompletedFirstTrade, setHasCompletedFirstTrade] = useState(false);
   const [hasViewedTrace, setHasViewedTrace] = useState(false);
 
+
   // Get current user from localStorage
   const [currentUser, setCurrentUser] = useState<string | null>(null);
 
@@ -94,7 +98,7 @@ export default function Dashboard() {
         setCurrentUser(parsed.id || null);
 
         if (!parsed.id) {
-          console.error('[Dashboard] No valid UUID found in user data:', parsed);
+          log.error({ parsed }, 'No valid UUID found in user data');
           navigate('/login');
         }
       } catch {
@@ -371,116 +375,6 @@ export default function Dashboard() {
                   )}
                 </div>
               </Card>
-
-              {/* Recent Activity */}
-              <Card className="bg-slate-900 border-slate-700">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-green-400" />
-                    Recent Activity
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {(ordersLoading || transfersLoading) ? (
-                    <div className="space-y-3">
-                      {[...Array(3)].map((_, i) => (
-                        <Skeleton key={i} className="h-16 w-full bg-slate-800" />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {/* Orders */}
-                      {orders?.slice(0, 3).map((order) => (
-                        <div
-                          key={order.orderId}
-                          className="flex items-center justify-between p-3 bg-slate-800 rounded-lg group hover:bg-slate-750 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            {order.side === 'BUY' ? (
-                              <ArrowUpRight className="w-5 h-5 text-green-400" />
-                            ) : (
-                              <ArrowDownRight className="w-5 h-5 text-red-400" />
-                            )}
-                            <div>
-                              <p className={`font-medium ${order.side === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
-                                {order.side} {order.quantity?.toFixed(6)} BTC
-                              </p>
-                              <p className="text-sm text-slate-400">
-                                {formatTimeAgo(new Date(order.createdAt))}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <p className="text-sm font-mono text-slate-300">
-                                ${order.fillPrice?.toLocaleString() || 'Market'}
-                              </p>
-                              <p className={`text-sm font-medium ${getStatusColor(order.status, order.side)}`}>
-                                {order.status}
-                              </p>
-                            </div>
-                            {order.traceId && (
-                              <a
-                                href={getJaegerTraceUrl(order.traceId)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg text-purple-400 hover:text-purple-300 transition-colors opacity-0 group-hover:opacity-100"
-                                title="View trace in Jaeger"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* Transfers */}
-                      {transfers?.slice(0, 2).map((transfer) => (
-                        <div
-                          key={transfer.transferId}
-                          className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border-l-2 border-purple-500"
-                        >
-                          <div className="flex items-center gap-3">
-                            <Send className="w-5 h-5 text-purple-400" />
-                            <div>
-                              <p className="font-medium text-purple-400">
-                                Transfer {transfer.amount?.toFixed(6)} BTC
-                              </p>
-                              <p className="text-sm text-slate-400">
-                                {transfer.fromUserId} → {transfer.toUserId}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-sm font-medium ${getStatusColor(transfer.status)}`}>
-                              {transfer.status}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-
-                      {(!orders?.length && !transfers?.length) && (
-                        <div className="text-center py-10">
-                          <div className="relative inline-block mb-4">
-                            <Wallet className="w-12 h-12 text-cyan-500/40" />
-                            <div className="absolute inset-0 animate-ping">
-                              <Wallet className="w-12 h-12 text-cyan-500/20" />
-                            </div>
-                          </div>
-                          <p className="text-lg font-medium text-slate-300 mb-1">Ready to Start Trading</p>
-                          <p className="text-sm text-slate-500 mb-4 max-w-xs mx-auto">
-                            Use the form on the left to make your first trade. Each transaction is traced with OpenTelemetry.
-                          </p>
-                          <div className="flex items-center justify-center gap-2 text-xs text-purple-400/60">
-                            <Eye className="w-3 h-3" />
-                            <span>Traces will appear in real-time</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
             </div>
 
             {/* Right Column - Portfolio + Traces */}
@@ -593,6 +487,7 @@ export default function Dashboard() {
               <TraceViewer />
             </div>
           </div>
+
         </main>
       </div>
     </Layout>

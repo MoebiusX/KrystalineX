@@ -16,6 +16,7 @@ import type { AmountAnomaly, AmountOperationType, SeverityLevel } from './types'
 import { SEVERITY_CONFIG, WHALE_THRESHOLDS } from './types';
 import { amountProfiler } from './amount-profiler';
 import { config } from '../config';
+import { recordAnomalyDetected } from '../metrics/prometheus';
 import { createLogger } from '../lib/logger';
 
 const logger = createLogger('amount-anomaly-detector');
@@ -233,6 +234,7 @@ export class AmountAnomalyDetector {
 
         // Store anomaly
         this.anomalies.set(anomaly.id, anomaly);
+        recordAnomalyDetected(operationType, anomaly.severity);
 
         // Log the anomaly (passive monitoring)
         logger.warn({

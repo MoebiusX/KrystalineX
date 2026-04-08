@@ -1,0 +1,122 @@
+{
+  "uid": "kx-rabbitmq",
+  "title": "KrystalineX RabbitMQ",
+  "description": "RabbitMQ monitoring: queues, consumers, message rates, memory usage",
+  "tags": ["krystalinex", "rabbitmq", "messaging"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "title": "Queue Depth",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_messages{queue=~\".+\"}",
+          "legendFormat": "{{queue}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Consumer Count",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rabbitmq_queue_consumers{queue=~\".+\"}",
+          "legendFormat": "{{queue}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Message Publish Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(rabbitmq_global_messages_received_total[5m])",
+          "legendFormat": "published/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Message Deliver/Ack Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(rabbitmq_global_messages_delivered_consume_auto_ack_total[5m])",
+          "legendFormat": "auto-ack/s"
+        },
+        {
+          "expr": "rate(rabbitmq_global_messages_acknowledged_total[5m])",
+          "legendFormat": "ack/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "RabbitMQ Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rabbitmq_process_resident_memory_bytes",
+          "legendFormat": "resident memory"
+        },
+        {
+          "expr": "rabbitmq_resident_memory_limit_bytes",
+          "legendFormat": "memory limit"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "title": "Circuit Breaker State",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "circuit_breaker_state{service=\"rabbitmq\"}",
+          "legendFormat": "RabbitMQ"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "CLOSED", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "OPEN", "color": "red" } } },
+            { "type": "value", "options": { "2": { "text": "HALF-OPEN", "color": "yellow" } } }
+          ]
+        }
+      }
+    }
+  ]
+}

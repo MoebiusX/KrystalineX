@@ -1,0 +1,214 @@
+{
+  "uid": "kx-slo-dashboard",
+  "title": "KrystalineX SLO Dashboard",
+  "description": "Service Level Objectives: availability, latency, error budgets, burn rates",
+  "tags": ["krystalinex", "slo", "reliability"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "title": "Availability SLO (99.9%)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "(1 - slo:http_requests:error_ratio_1h) * 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 99,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 99.5 },
+              { "color": "green", "value": 99.9 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Latency SLO (95% < 500ms)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "slo:http_request_duration:ratio_below_500ms_1h * 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 90,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 93 },
+              { "color": "green", "value": 95 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Error Budget Remaining",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "slo:availability:error_budget_remaining * 100",
+          "legendFormat": "Availability Budget"
+        },
+        {
+          "expr": "slo:latency:error_budget_remaining * 100",
+          "legendFormat": "Latency Budget"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 25 },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 75 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Error Ratio Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "slo:http_requests:error_ratio_5m",
+          "legendFormat": "5m error ratio"
+        },
+        {
+          "expr": "slo:http_requests:error_ratio_1h",
+          "legendFormat": "1h error ratio"
+        },
+        {
+          "expr": "slo:http_requests:error_ratio_6h",
+          "legendFormat": "6h error ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.001 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Latency Percentiles",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "slo:http_request_duration:p95_5m * 1000",
+          "legendFormat": "P95",
+          "exemplar": true
+        },
+        {
+          "expr": "slo:http_request_duration:p99_5m * 1000",
+          "legendFormat": "P99",
+          "exemplar": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Availability Burn Rate (Multi-Window)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "slo:http_requests:error_ratio_5m / 0.001",
+          "legendFormat": "5m burn rate"
+        },
+        {
+          "expr": "slo:http_requests:error_ratio_30m / 0.001",
+          "legendFormat": "30m burn rate"
+        },
+        {
+          "expr": "slo:http_requests:error_ratio_1h / 0.001",
+          "legendFormat": "1h burn rate"
+        },
+        {
+          "expr": "slo:http_requests:error_ratio_6h / 0.001",
+          "legendFormat": "6h burn rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "orange", "value": 3 },
+              { "color": "red", "value": 14.4 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Budget Minutes Remaining",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "slo:availability:error_budget_remaining * 43.2",
+          "legendFormat": "Availability (of 43.2 min)"
+        },
+        {
+          "expr": "slo:latency:error_budget_remaining * 43.2",
+          "legendFormat": "Latency (of 43.2 min)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "green", "value": 30 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

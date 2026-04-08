@@ -70,6 +70,14 @@ const queueDepth = new Gauge({
     registers: [register]
 });
 
+// Initialize counters with zero values so they appear in /metrics immediately
+for (const side of ['BUY', 'SELL']) {
+    for (const status of ['filled', 'rejected']) {
+        ordersProcessedTotal.inc({ status, side }, 0);
+    }
+}
+queueDepth.set({ queue: 'payments' }, 0);
+
 // Start metrics HTTP server
 const metricsApp = express();
 const METRICS_PORT = parseInt(process.env.METRICS_PORT || '3001', 10);
@@ -209,7 +217,9 @@ async function main() {
                     });
 
                     // Simulate order matching (validation, price lookup, execution)
-                    await simulateProcessing(80);
+                    // Random 150-800ms to model real order book matching + risk checks
+                    const matchingDelay = 150 + Math.floor(Math.random() * 650);
+                    await simulateProcessing(matchingDelay);
 
                     // Calculate execution
                     const { fillPrice, slippage } = simulateExecution(currentPrice, side);
@@ -257,8 +267,11 @@ async function main() {
                     }
                     console.log(`[MATCHER] Response with POST context: ${originalContext.traceparent?.slice(0, 40) || 'none'}...`);
 
+                    // Reply to the caller's exclusive queue if set, otherwise use shared queue
+                    const replyTo = msg.properties.replyTo || RESPONSE_QUEUE;
+
                     channel.sendToQueue(
-                        RESPONSE_QUEUE,
+                        replyTo,
                         Buffer.from(JSON.stringify(response)),
                         {
                             persistent: true,

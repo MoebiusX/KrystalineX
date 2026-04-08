@@ -64,6 +64,11 @@ const configSchema = z.object({
     lokiUrl: z.string().default('http://localhost:3100'),
   }),
 
+  redis: z.object({
+    url: z.string().default('redis://localhost:6379'),
+    keyPrefix: z.string().default('kx:'),
+  }),
+
   ai: z.object({
     ollamaUrl: z.string().default('http://localhost:11434'),
     model: z.string().default('llama3.2:1b'),
@@ -84,6 +89,11 @@ const configSchema = z.object({
   // Monitor/Anomaly Detection Features
   monitor: z.object({
     enableAmountAnomalyDetection: z.boolean().default(false),
+    enableBayesianInference: z.boolean().default(false),
+  }),
+
+  bayesianService: z.object({
+    url: z.string().default('http://localhost:8100'),
   }),
 });
 
@@ -192,6 +202,11 @@ function loadConfig() {
       lokiUrl: process.env.LOKI_URL || 'http://localhost:3100',
     },
 
+    redis: {
+      url: process.env.REDIS_URL || 'redis://localhost:6379',
+      keyPrefix: process.env.REDIS_KEY_PREFIX || 'kx:',
+    },
+
     ai: process.env.OLLAMA_URL ? {
       ollamaUrl: process.env.OLLAMA_URL,
       model: process.env.OLLAMA_MODEL || 'llama3.2:1b',
@@ -212,6 +227,11 @@ function loadConfig() {
     // Monitor/Anomaly Detection Features
     monitor: {
       enableAmountAnomalyDetection: process.env.ENABLE_AMOUNT_ANOMALY_DETECTION === 'true',
+      enableBayesianInference: process.env.ENABLE_BAYESIAN_INFERENCE === 'true',
+    },
+
+    bayesianService: {
+      url: process.env.BAYESIAN_SERVICE_URL || 'http://localhost:8100',
     },
   };
 

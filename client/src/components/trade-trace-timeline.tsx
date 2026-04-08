@@ -8,6 +8,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger('TraceTimeline');
 import { Button } from "@/components/ui/button";
 import {
   Activity,
@@ -95,7 +98,7 @@ export function TradeTraceTimeline({ traceId, className }: TradeTraceTimelinePro
         const data = await response.json();
         setTrace(data);
       } catch (err: any) {
-        console.error('Error fetching trace:', err);
+        log.error({ err }, 'Error fetching trace');
         setError(err.message);
       } finally {
         setLoading(false);

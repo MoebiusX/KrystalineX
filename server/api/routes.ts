@@ -17,6 +17,7 @@ import { validateUUID } from "../middleware/uuid-validation";
 import { tradingHealthCheck } from "../middleware/health-check";
 import { priceService } from '../services/price-service';
 import { binanceFeed } from '../services/binance-feed';
+import { priceFeedManager } from '../services/price-feed-manager';
 
 const logger = createLogger('api-routes');
 
@@ -36,10 +37,10 @@ export function registerRoutes(app: Express) {
   // ADMIN ENDPOINTS
   // ============================================
 
-  // Reconnect price feed (Binance WebSocket)
+  // Reconnect price feed (triggers escalation ladder)
   app.post('/api/v1/admin/price-feed/reconnect', async (req: Request, res: Response) => {
     try {
-      binanceFeed.reconnect();
+      priceFeedManager.reconnect();
       logger.info('Admin triggered price feed reconnect');
       res.json({
         success: true,
@@ -52,14 +53,14 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Get price feed status
+  // Get price feed status (all providers + escalation state)
   app.get('/api/v1/admin/price-feed/status', async (req: Request, res: Response) => {
     try {
-      const feedStatus = binanceFeed.getStatus();
+      const managerStatus = priceFeedManager.getStatus();
       const priceStatus = priceService.getStatus();
 
       res.json({
-        binanceFeed: feedStatus,
+        feedManager: managerStatus,
         priceService: priceStatus,
         timestamp: new Date().toISOString()
       });

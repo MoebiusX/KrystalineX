@@ -26,7 +26,7 @@ const SECRET_PATTERNS = [
   { pattern: /(?:auth[_-]?token|authtoken)\s*[:=]\s*['"][^'"]{10,}['"]/gi, name: 'Auth Token' },
   
   // Database credentials
-  { pattern: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{4,}['"]/gi, name: 'Password', exclude: ['test', 'example', 'placeholder', 'your-', 'process.env', 'CHANGE_ME', 'change_me'] },
+  { pattern: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{4,}['"]/gi, name: 'Password', exclude: ['test', 'example', 'placeholder', 'your-', 'process.env', 'CHANGE_ME', 'change_me', 'synthetic'] },
   
   // AWS
   { pattern: /AKIA[0-9A-Z]{16}/g, name: 'AWS Access Key ID' },
@@ -39,7 +39,7 @@ const SECRET_PATTERNS = [
   { pattern: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, name: 'JWT Token' },
   
   // Connection strings with embedded credentials
-  { pattern: /(?:mongodb|postgres|mysql|redis):\/\/[^:]+:[^@]{4,}@/gi, name: 'Connection String with Password', exclude: ['test:test', 'user:password', 'username:password'] },
+  { pattern: /(?:mongodb|postgres|mysql|redis):\/\/[^:]+:[^@\n]{4,}@/gi, name: 'Connection String with Password', exclude: ['test:test', 'user:password', 'username:password', '${', '${{'] },
 ];
 
 // Files and directories to skip
@@ -59,6 +59,7 @@ const IGNORE_PATTERNS = [
   /test-results/,
   /k8s\/charts\/.*\/templates\/secrets\.yaml/, // K8s secret templates use placeholders
   /scripts\/.*demo.*\.ts$/, // Demo scripts may have example credentials
+  /values-secrets\.yaml$/, // K8s secrets values file (gitignored, never committed)
 ];
 
 // File extensions to scan

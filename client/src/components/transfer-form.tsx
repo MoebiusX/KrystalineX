@@ -4,6 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { trace, context, SpanStatusCode } from "@opentelemetry/api";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger('TransferForm');
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -61,9 +64,23 @@ export function TransferForm() {
         }
     }, []);
 
-    // Fetch all verified users
+    // Fetch all verified users — explicit queryFn for proper Kong routing
+    const kongUrl = import.meta.env.VITE_KONG_URL || '';
     const { data: users, isLoading: usersLoading } = useQuery<User[]>({
-        queryKey: ["/api/v1/users"],
+        queryKey: ["/api/v1/users", { userId: currentUser?.id }],
+        queryFn: async () => {
+            const token = localStorage.getItem('accessToken');
+            const res = await fetch(`${kongUrl}/api/v1/users`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+            if (!res.ok) {
+                log.error({ status: res.status, statusText: res.statusText }, 'Failed to fetch users');
+                return [];
+            }
+            const data = await res.json();
+            log.debug({ count: data?.length }, 'Fetched users');
+            return data;
+        },
         enabled: !!currentUser,
     });
 

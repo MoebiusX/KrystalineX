@@ -69,6 +69,14 @@ vi.mock('../../server/lib/logger', () => ({
 vi.mock('@opentelemetry/api', () => ({
   trace: {
     getActiveSpan: vi.fn(),
+    getTracer: vi.fn(() => ({
+      startActiveSpan: vi.fn((_name: string, fn: any) => fn({
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        spanContext: () => ({ traceId: '1234567890abcdef1234567890abcdef', spanId: 'abcdef1234567890' }),
+      })),
+    })),
     getSpan: vi.fn(() => ({
       spanContext: () => ({ traceId: '1234567890abcdef1234567890abcdef' }),
     })),

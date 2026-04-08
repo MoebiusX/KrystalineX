@@ -23,7 +23,7 @@ async function delay(ms) {
 async function retryWithBackoff(fn, options = {}) {
     const {
         maxRetries = 10,
-        initialDelay = 1000,
+        initialDelay = config.e2e.retryPauseMs,
         maxDelay = 10000,
         backoffMultiplier = 1.5,
         timeoutMs = 30000
@@ -299,7 +299,6 @@ async function testCase1_EmptyHeaders() {
             return null; // Retry
         }, {
             maxRetries: 15,
-            initialDelay: 2000,
             maxDelay: 5000,
             timeoutMs: 60000
         });
@@ -391,7 +390,6 @@ async function testCase2_ClientHeaders() {
             return { traceId: clientTraceId, spanCount: spans.length };
         }, {
             maxRetries: 10,
-            initialDelay: 1000,
             maxDelay: 3000,
             timeoutMs: 25000
         });

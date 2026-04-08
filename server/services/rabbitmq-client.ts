@@ -1,9 +1,12 @@
 import * as amqp from 'amqplib';
+import { randomUUID } from 'crypto';
 import { trace, context, SpanStatusCode, SpanKind, propagation } from '@opentelemetry/api';
 import { config } from '../config';
 import { createLogger } from '../lib/logger';
 import { ExternalServiceError, TimeoutError, getErrorMessage } from '../lib/errors';
 import { createCircuitBreaker, CircuitBreaker } from '../lib/circuit-breaker';
+import { recordCircuitBreakerTrip, recordCircuitBreakerState } from '../metrics/prometheus';
+import { rabbitmqQueueDepth } from '../metrics/prometheus';
 
 const logger = createLogger('rabbitmq');
 
@@ -40,6 +43,7 @@ export class RabbitMQClient {
   private readonly RESPONSE_QUEUE: string;
   private readonly LEGACY_QUEUE: string;
   private readonly LEGACY_RESPONSE: string;
+  private replyQueue: string | null = null;
   private tracer;
 
   private pendingResponses: Map<string, ResponseCallback> = new Map();
@@ -57,6 +61,7 @@ export class RabbitMQClient {
       timeout: 30000,
       onStateChange: (from, to) => {
         logger.warn({ from, to }, 'RabbitMQ circuit breaker state changed');
+        recordCircuitBreakerTrip('rabbitmq', from, to);
       },
     });
   }
@@ -75,9 +80,29 @@ export class RabbitMQClient {
       await this.channel.assertQueue(this.LEGACY_QUEUE, { durable: true });
       await this.channel.assertQueue(this.LEGACY_RESPONSE, { durable: true });
 
+      // Create exclusive per-instance reply queue for multi-replica support.
+      // When multiple server replicas share the durable payment_response queue,
+      // RabbitMQ round-robins responses — the replica that sent the order may
+      // not receive its own reply, causing a 5s timeout. This exclusive queue
+      // ensures responses are routed back to the correct replica.
+      const instanceId = randomUUID().slice(0, 8);
+      const { queue } = await this.channel.assertQueue('', {
+        exclusive: true,
+        autoDelete: true,
+        durable: false,
+      });
+      this.replyQueue = queue;
+
       logger.info({
         queues: [this.ORDERS_QUEUE, this.RESPONSE_QUEUE, this.LEGACY_QUEUE, this.LEGACY_RESPONSE],
+        replyQueue: this.replyQueue,
+        instanceId,
       }, 'RabbitMQ connected successfully');
+
+      // Set initial circuit breaker state and start queue depth polling
+      recordCircuitBreakerState('rabbitmq', 'CLOSED');
+      this.startQueueDepthPolling();
+
       return true;
     } catch (error) {
       logger.error({ err: error }, 'RabbitMQ connection failed');
@@ -176,6 +201,7 @@ export class RabbitMQClient {
             {
               persistent: true,
               correlationId: correlationId,
+              replyTo: this.replyQueue || undefined,
               headers: {
                 ...publishHeaders,
                 'x-correlation-id': correlationId,
@@ -249,8 +275,7 @@ export class RabbitMQClient {
 
     logger.info('Starting order response consumer...');
 
-    // Listen on legacy response queue
-    await this.channel.consume(this.LEGACY_RESPONSE, (msg) => {
+    const handleMessage = (msg: amqp.ConsumeMessage | null) => {
       if (msg) {
         try {
           const response = JSON.parse(msg.content.toString());
@@ -260,6 +285,12 @@ export class RabbitMQClient {
             correlationId: correlationId?.slice(0, 8),
             status: response.status,
           }, 'Received execution response');
+
+          // Extract trace context from response headers (matcher sends original POST traceparent)
+          // This ensures the Promise continuation inherits the POST span context
+          // See: docs/observability/01_OTEL_TRACING_GUIDE.md §5 "RabbitMQ Consumer: Context Extraction"
+          const headers = msg.properties.headers || {};
+          const responseContext = propagation.extract(context.active(), headers);
 
           // Convert legacy response format
           const executionResponse: ExecutionResponse = {
@@ -275,7 +306,11 @@ export class RabbitMQClient {
 
           const callback = this.pendingResponses.get(correlationId);
           if (callback) {
-            callback(executionResponse);
+            // Invoke within extracted context so Promise continuation (submitOrder)
+            // runs with POST span as parent — wallet update + ZK proof spans join the trace
+            context.with(responseContext, () => {
+              callback(executionResponse);
+            });
             logger.debug({ correlationId }, 'Execution delivered to waiting caller');
           } else {
             logger.warn({ correlationId }, 'No pending callback found for execution response');
@@ -287,9 +322,19 @@ export class RabbitMQClient {
           this.channel!.nack(msg, false, false);
         }
       }
-    });
+    };
 
-    logger.info(`Consumer started - listening on ${this.LEGACY_RESPONSE}`);
+    // Primary: consume from exclusive per-instance reply queue
+    if (this.replyQueue) {
+      await this.channel.consume(this.replyQueue, handleMessage);
+      logger.info(`Consumer started - listening on exclusive reply queue ${this.replyQueue}`);
+    }
+
+    // Fallback: also consume from shared legacy queue for backward compat
+    // (handles responses from older matcher versions that don't use replyTo)
+    await this.channel.consume(this.LEGACY_RESPONSE, handleMessage);
+
+    logger.info(`Consumer started - also listening on shared ${this.LEGACY_RESPONSE}`);
   }
 
   async disconnect(): Promise<void> {
@@ -306,6 +351,22 @@ export class RabbitMQClient {
     } catch (error: unknown) {
       logger.error({ err: error }, 'Error disconnecting from RabbitMQ');
     }
+  }
+
+  private startQueueDepthPolling(): void {
+    const poll = async () => {
+      if (!this.channel) return;
+      try {
+        for (const queue of [this.LEGACY_QUEUE, this.LEGACY_RESPONSE]) {
+          const info = await this.channel.checkQueue(queue);
+          rabbitmqQueueDepth.set({ queue }, info.messageCount);
+        }
+      } catch (err) {
+        logger.debug({ err }, 'Queue depth poll failed');
+      }
+    };
+    poll();
+    setInterval(poll, 30_000);
   }
 
   isConnected(): boolean {

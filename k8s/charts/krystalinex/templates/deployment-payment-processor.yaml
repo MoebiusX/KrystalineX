@@ -26,7 +26,7 @@ spec:
       initContainers:
         - name: wait-for-rabbitmq
           image: busybox:1.36
-          command: ['sh', '-c', 'until nc -z {{ include "krystalinex.fullname" . }}-rabbitmq 5672; do echo "Waiting for RabbitMQ..."; sleep 2; done; echo "RabbitMQ is ready!"']
+          command: ['sh', '-c', 'until wget -q -O /dev/null http://{{ include "krystalinex.fullname" . }}-rabbitmq:15672 2>/dev/null; do echo "Waiting for RabbitMQ..."; sleep 2; done; echo "RabbitMQ is ready!"']
       containers:
         - name: payment-processor
           image: "{{ .Values.paymentProcessor.image.repository }}:{{ .Values.paymentProcessor.image.tag }}"

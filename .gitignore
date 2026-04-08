@@ -36,25 +36,32 @@ secrets/
 *.pem
 *.key
 
-# Confidential documentation (whitepaper, screenshots, zip bundles)
-docs/OBSERVABILITY_WHITEPAPER.md
+# Confidential documentation (screenshots, zip bundles)
 docs/OBSERVABILITY_ADOPTION_GUIDE.md
 docs/OBSERVABILITY_MATHEMATICS.md
-docs/images/
 docs/api/
 docs/*.zip
 docs-bundle.zip
+docs/ObservabilityAdoption.md
+docs/Enterprise_Observability_Framework_2026.md
+docs/images/
 
 # Grafana dashboard exports (raw exports with timestamps, clean copies in k8s/charts/krystalinex/dashboards/)
 docs/*Dashboard*.json
 docs/*Observability*.json
 
 # Model training artifacts (large binary files)
-lora-anomaly-analyzer/
 last_run_prepared/
 *.gguf
 *.safetensors
 *.bin
+*.pt
+*.pth
+
+# LoRA training generated outputs (keep lightweight config/tokenizer files tracked)
+lora-anomaly-analyzer/checkpoint-*/
+lora-anomaly-analyzer/merged/
+lora-anomaly-analyzer/tokenizer.json
 
 # Confidential
 docs/bizait lab network.md
@@ -63,3 +70,9 @@ values-secrets.yaml
 
 # VPN configs
 *.ovpn
+
+# Circom compilation intermediates (large, not needed at runtime)
+server/circuits/build/*.ptau
+server/circuits/build/*_0.zkey
+server/circuits/build/*.r1cs
+server/circuits/build/*.sym

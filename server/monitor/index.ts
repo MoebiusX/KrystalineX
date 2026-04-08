@@ -23,6 +23,10 @@ import { anomalyDetector } from './anomaly-detector';
 import { historyStore } from './history-store';
 import { amountProfiler } from './amount-profiler';
 import { amountAnomalyDetector } from './amount-anomaly-detector';
+import { bayesianInference } from '../bayesian';
+import { businessStatsService } from '../services/business-stats-service';
+
+let businessStatsInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Start all monitor services
@@ -55,7 +59,34 @@ export function startMonitor(): void {
         logger.info('Amount anomaly detection is disabled (set ENABLE_AMOUNT_ANOMALY_DETECTION=true to enable)');
     }
 
+    // Start Bayesian inference (if enabled)
+    if (config.monitor.enableBayesianInference) {
+        logger.info('🧠 Bayesian probabilistic inference ENABLED');
+        // Delay start to allow trace profiler baselines to populate
+        setTimeout(() => {
+            bayesianInference.start();
+        }, 70000);
+    } else {
+        logger.info('Bayesian inference is disabled (set ENABLE_BAYESIAN_INFERENCE=true to enable)');
+    }
+
     logger.info('Monitor services started successfully');
+
+    // Start periodic business stats sync (active users, trade gauges)
+    // Without this, Prometheus gauges like kx_active_users_current stay at 0
+    // because they're only updated on-demand via API calls.
+    setTimeout(() => {
+        const syncStats = async () => {
+            try {
+                await businessStatsService.getStats();
+            } catch (error) {
+                logger.error({ err: error }, 'Failed to sync business stats to Prometheus');
+            }
+        };
+        syncStats(); // initial sync
+        businessStatsInterval = setInterval(syncStats, 30_000); // every 30s
+        logger.info('Business stats Prometheus sync started (30s interval)');
+    }, 5000); // delay 5s to let DB connections stabilize
 }
 
 /**
@@ -71,6 +102,15 @@ export function stopMonitor(): void {
     // Stop amount anomaly detection services
     amountAnomalyDetector.stop();
     amountProfiler.stop();
+
+    // Stop Bayesian inference
+    bayesianInference.stop();
+
+    // Stop business stats sync
+    if (businessStatsInterval) {
+        clearInterval(businessStatsInterval);
+        businessStatsInterval = null;
+    }
 
     logger.info('Monitor services stopped');
 }

@@ -23,12 +23,16 @@ import { rabbitMQClient } from "./services/rabbitmq-client";
 import { monitorRoutes, startMonitor } from "./monitor";
 import { metricsMiddleware, registerMetricsEndpoint } from "./metrics/prometheus";
 import { transparencyService } from "./services/transparency-service";
+import { getRedisClient } from "./lib/redis";
 import authRoutes from "./auth/routes";
 import walletRoutes from "./wallet/routes";
 import tradeRoutes from "./trade/routes";
 import publicRoutes from "./api/public-routes";
 import healthRoutes from "./api/health-routes";
 import { binanceFeed } from "./services/binance-feed";
+import { coingeckoFeed } from "./services/coingecko-feed";
+import { priceFeedManager } from "./services/price-feed-manager";
+import { createUserContextMiddleware } from "./middleware/user-context";
 
 const logger = createLogger('server');
 const app = express();
@@ -68,6 +72,9 @@ app.use(express.urlencoded({ extended: false }));
 // CORS configuration (environment-aware)
 app.use(corsMiddleware);
 
+// Propagate authenticated user ID to OTEL spans
+app.use(createUserContextMiddleware());
+
 (async () => {
   // Initialize PostgreSQL storage FIRST (before any routes use it)
   const { initializeStorage } = await import('./storage');
@@ -96,12 +103,14 @@ app.use(corsMiddleware);
     logger.warn({ error }, 'RabbitMQ initialization failed - continuing without message queue');
   }
 
-  // Start real-time price feed (Binance public WebSocket - no API key needed)
+  // Start multi-provider price feed with automatic failover
   try {
-    binanceFeed.start();
-    logger.info('Binance price feed started - real-time prices enabled');
+    priceFeedManager.register(binanceFeed);
+    priceFeedManager.register(coingeckoFeed);
+    priceFeedManager.start();
+    logger.info('Price feed manager started — Binance (primary) + CoinGecko (fallback)');
   } catch (error) {
-    logger.warn({ error }, 'Binance price feed failed to start - trading will show prices unavailable');
+    logger.warn({ error }, 'Price feed manager failed to start - trading will show prices unavailable');
   }
 
   // Check Kong Gateway health
@@ -133,14 +142,22 @@ app.use(corsMiddleware);
   app.use('/api/v1/monitor', monitorRoutes);
   app.use('/api/monitor', monitorRoutes);
 
+  // Register auto-remediation webhook (Alertmanager → automated safe actions)
+  const autoRemediationRoutes = (await import('./monitor/auto-remediation')).default;
+  app.use('/api/v1/monitor', autoRemediationRoutes);
+
   // Register public transparency routes (unauthenticated)
   app.use('/api/v1/public', publicRoutes);
+  app.use('/api/public', publicRoutes);
 
   // Start trace monitoring services (polls Jaeger for baselines/anomalies)
   startMonitor();
 
   // Start transparency service for public metrics
   transparencyService.start();
+
+  // Initialize Redis for caching and rate limiting
+  getRedisClient();
 
   // Create server
   const { createServer } = await import("http");
@@ -211,12 +228,12 @@ app.use(corsMiddleware);
       logger.error({ err: error }, 'Error stopping monitor services');
     }
 
-    // Stop Binance price feed
+    // Stop price feed manager (stops all providers)
     try {
-      binanceFeed.stop();
-      logger.info('Binance price feed stopped');
+      priceFeedManager.stop();
+      logger.info('Price feed manager stopped');
     } catch (error) {
-      logger.error({ err: error }, 'Error stopping Binance feed');
+      logger.error({ err: error }, 'Error stopping price feed manager');
     }
 
     // Stop transparency service
@@ -242,6 +259,15 @@ app.use(corsMiddleware);
       logger.info('Database connections closed');
     } catch (error) {
       logger.error({ err: error }, 'Error closing database');
+    }
+
+    // Close Redis connection
+    try {
+      const { closeRedis } = await import('./lib/redis');
+      await closeRedis();
+      logger.info('Redis connection closed');
+    } catch (error) {
+      logger.error({ err: error }, 'Error closing Redis');
     }
 
     logger.info('Graceful shutdown complete');

@@ -38,9 +38,15 @@ spec:
                 port:
                   number: 80
                 {{- else if eq .service "server" }}
+                {{- if $.Values.kong.enabled }}
+                name: {{ include "krystalinex.fullname" $ }}-kong
+                port:
+                  number: 8000
+                {{- else }}
                 name: {{ include "krystalinex.fullname" $ }}-server
                 port:
                   number: 5000
+                {{- end }}
                 {{- else if eq .service "grafana" }}
                 name: {{ include "krystalinex.fullname" $ }}-grafana
                 port:
@@ -67,6 +73,81 @@ spec:
                   number: 8081
                 {{- end }}
           {{- end }}
+    {{- end }}
+{{- end }}
+{{- if and .Values.ingress.enabled .Values.otelMcpServer.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-mcp
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: /mcp(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ include "krystalinex.fullname" $ }}-otel-mcp-server
+                port:
+                  number: 3001
+    {{- end }}
+{{- end }}
+{{- if and .Values.ingress.enabled .Values.goalert.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-goalert
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+  annotations:
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Authorization "";
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: /goalert
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "krystalinex.fullname" $ }}-goalert
+                port:
+                  number: 8081
     {{- end }}
 {{- end }}
 {{- if and .Values.ingress.enabled .Values.basicAuth.enabled .Values.ingress.protectedPaths }}

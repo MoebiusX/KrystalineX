@@ -8,6 +8,7 @@
 import type { Anomaly } from './types';
 import { wsServer } from './ws-server';
 import { metricsCorrelator } from './metrics-correlator';
+import { enrichAlertWithAnalysis } from './alertmanager-notifier';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
 import { Counter, Histogram, Gauge } from 'prom-client';
@@ -73,6 +74,19 @@ const MAX_QUEUE_SIZE = 100;
 
 // Initialize gauge to 0 so it appears in metrics immediately
 llmQueueDepth.set(0);
+
+// Initialize counters with zero values so they appear in /metrics
+for (const status of ['success', 'failure', 'timeout']) {
+    for (const useCase of ['latency_spike', 'error_burst', 'saturation', 'dependency_failure', 'general']) {
+        llmAnalysisTotal.inc({ status, use_case: useCase }, 0);
+    }
+}
+for (const severity of ['sev1', 'sev2', 'sev3', 'sev4', 'sev5']) {
+    llmEventsBySeverity.inc({ severity }, 0);
+}
+for (const reason of ['queue_full', 'llm_error', 'timeout']) {
+    llmDroppedEvents.inc({ reason }, 0);
+}
 
 // Use case detection patterns
 interface UseCase {
@@ -316,25 +330,42 @@ class StreamAnalyzer {
         }
 
         wsServer.analysisComplete(anomalyIds, fullResponse);
+
+        // Update Alertmanager alerts with LLM analysis text
+        for (const anomaly of anomalies) {
+            enrichAlertWithAnalysis(anomaly.service, anomaly.operation, fullResponse).catch(() => {});
+        }
     }
 
     /**
-     * Build condensed batch prompt
+     * Build condensed batch prompt with trace span context
      */
     private buildBatchPrompt(anomalies: Anomaly[]): string {
         const summaries = anomalies.map((a, i) => {
             const useCase = USE_CASES.find(uc => uc.match(a));
             const statusCode = a.attributes?.['http.status_code'] || '';
-            return `${i + 1}. [SEV${a.severity}] ${a.service}:${a.operation} ${a.duration}ms (+${a.deviation.toFixed(1)}σ) ${statusCode ? `HTTP ${statusCode}` : ''}`;
+            let entry = `${i + 1}. [SEV${a.severity}] ${a.service}:${a.operation} ${a.duration}ms (+${a.deviation.toFixed(1)}σ) ${statusCode ? `HTTP ${statusCode}` : ''}`;
+
+            // Attach top spans from the trace so the LLM can pinpoint the bottleneck
+            if (a.traceSpans?.length) {
+                const spanLines = a.traceSpans
+                    .slice(0, 5)
+                    .map(s => `     ${s.service}:${s.operation} ${s.durationMs}ms (${s.pctOfTrace}%)`)
+                    .join('\n');
+                entry += `\n   Trace spans (by duration):\n${spanLines}`;
+            }
+
+            return entry;
         }).join('\n');
 
-        return `You are monitoring a crypto exchange. Analyze these ${anomalies.length} anomalies briefly:
+        return `You are monitoring a crypto exchange. Analyze these ${anomalies.length} anomalies:
 
 ${summaries}
 
-For each numbered anomaly, provide:
-- Likely cause (1 line)
-- Action to take (1 line)
+For each numbered anomaly:
+1. Identify the top 1-2 spans responsible for most of the delay (cite service:operation and %)
+2. Likely root cause (1 line)
+3. Action to take (1 line)
 
 Be concise and actionable. Focus on business impact.`;
     }

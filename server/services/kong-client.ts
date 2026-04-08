@@ -5,6 +5,7 @@ import { config } from '../config';
 import { createLogger } from '../lib/logger';
 import { ExternalServiceError } from '../lib/errors';
 import { createCircuitBreaker, CircuitBreaker } from '../lib/circuit-breaker';
+import { recordCircuitBreakerTrip } from '../metrics/prometheus';
 
 const logger = createLogger('kong');
 
@@ -22,6 +23,7 @@ export class KongClient {
       timeout: 60000,
       onStateChange: (from, to) => {
         logger.warn({ from, to }, 'Kong circuit breaker state changed');
+        recordCircuitBreakerTrip('kong', from, to);
       },
     });
   }

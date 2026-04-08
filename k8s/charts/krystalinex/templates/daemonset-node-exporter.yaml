@@ -27,6 +27,7 @@ spec:
             - '--path.sysfs=/host/sys'
             - '--path.rootfs=/host/root'
             - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+            - '--no-collector.arp'
           ports:
             - name: metrics
               containerPort: 9100

@@ -13,9 +13,12 @@
  */
 
 import { useEffect, useState } from 'react';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('Transparency');
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Activity, TrendingUp, Shield, Zap, Users, Eye } from 'lucide-react';
+import { Activity, TrendingUp, Shield, Zap, Users, Eye, AlertTriangle, Lock, CheckCircle, Fingerprint } from 'lucide-react';
 import { TradeTraceTimeline } from './trade-trace-timeline';
 import { getJaegerTraceUrl } from '@/lib/trace-utils';
 import { useLocation } from 'wouter';
@@ -59,6 +62,23 @@ interface PublicTrade {
   aiVerified: boolean;
 }
 
+interface ZKStats {
+  totalProofsGenerated: number;
+  totalVerifications: number;
+  verificationSuccessRate: number;
+  avgProvingTimeMs: number;
+  latestProofTimestamp: string | null;
+  solvencyProofAge: number;
+  solvency: {
+    totalReserveCommitment: string | null;
+    lastGeneratedAt: string | null;
+  };
+  circuits: {
+    tradeIntegrity: { count: number; avgMs: number };
+    solvency: { count: number; avgMs: number };
+  };
+}
+
 export function TransparencyDashboard() {
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [trades, setTrades] = useState<PublicTrade[]>([]);
@@ -67,6 +87,10 @@ export function TransparencyDashboard() {
   const [, setLocation] = useLocation();
   const [lastFetched, setLastFetched] = useState<Date>(new Date());
   const [secondsAgo, setSecondsAgo] = useState(0);
+  const [zkStats, setZkStats] = useState<ZKStats | null>(null);
+  const [verifyingTrade, setVerifyingTrade] = useState<string | null>(null);
+  const [verifiedTrades, setVerifiedTrades] = useState<Set<string>>(new Set());
+  const [failedTrades, setFailedTrades] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Check if user is logged in
@@ -91,13 +115,14 @@ export function TransparencyDashboard() {
 
   const fetchData = async () => {
     try {
-      const [statusRes, tradesRes] = await Promise.all([
+      const [statusRes, tradesRes, zkRes] = await Promise.all([
         fetch('/api/v1/public/status'),
         fetch('/api/v1/public/trades?limit=10'),
+        fetch('/api/v1/public/zk/stats'),
       ]);
 
       if (!statusRes.ok || !tradesRes.ok) {
-        console.error('Failed to fetch data:', { statusRes: statusRes.status, tradesRes: tradesRes.status });
+        log.error({ statusRes: statusRes.status, tradesRes: tradesRes.status }, 'Failed to fetch data');
         setLoading(false);
         return;
       }
@@ -107,11 +132,15 @@ export function TransparencyDashboard() {
 
       setStatus(statusData);
       setTrades(tradesData.trades || []);
+      if (zkRes.ok) {
+        const zkData = await zkRes.json();
+        setZkStats(zkData);
+      }
       setLastFetched(new Date());
       setSecondsAgo(0);
       setLoading(false);
     } catch (error) {
-      console.error('Failed to fetch transparency data:', error);
+      log.error({ error }, 'Failed to fetch transparency data');
       setLoading(false);
     }
   };
@@ -146,6 +175,14 @@ export function TransparencyDashboard() {
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-12">
+
+          {/* Demo Disclaimer Banner */}
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex items-start sm:items-center gap-3 animate-in fade-in duration-700">
+            <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5 sm:mt-0" />
+            <p className="text-sm text-amber-200/90 leading-relaxed">
+              <span className="font-semibold text-amber-300">Observability Demo</span> — Krystaline.io is a technology demonstration showcasing distributed tracing, real-time monitoring, and cryptographic verification infrastructure. No real funds are held, traded, or transferred. BTC/USD prices are sourced from Binance for simulation purposes only. This is not a regulated financial service.
+            </p>
+          </div>
           {/* Hero Section - Full Redesign */}
           <div className="relative min-h-[85vh] flex flex-col justify-center overflow-hidden">
 
@@ -570,102 +607,118 @@ export function TransparencyDashboard() {
             </div>
           </div>
 
-          {/* Live Trade Feed - Matching Live System Status Style */}
-          <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-700 delay-450">
-            {/* Glowing Background Effect */}
-            <div className="absolute -inset-4 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-indigo-500/10 rounded-3xl blur-2xl" />
+          {/* Proof of Integrity™ — Zero-Knowledge Proofs Section */}
+          <div className="relative animate-in fade-in slide-in-from-bottom-4 duration-700 delay-400">
+            <div className="absolute -inset-4 bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-cyan-500/10 rounded-3xl blur-2xl" />
 
-
-            <div className="relative bg-slate-900/80 backdrop-blur-2xl border border-cyan-500/20 rounded-3xl overflow-hidden shadow-2xl">
-              {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-cyan-500/10">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-cyan-500/20 rounded-lg">
-                    <Activity className="h-5 w-5 text-cyan-400" />
+            <div className="relative bg-slate-900/80 backdrop-blur-2xl border border-purple-500/20 rounded-3xl p-8 lg:p-12 shadow-2xl">
+              {/* Section Header */}
+              <div className="text-center mb-8">
+                <div className="flex items-center justify-center gap-3 mb-3">
+                  <div className="p-2 bg-purple-500/20 rounded-xl">
+                    <Lock className="h-6 w-6 text-purple-400" />
                   </div>
-                  <span className="font-semibold text-cyan-100">Live Trade Feed</span>
-                  <span className="text-xs text-cyan-100/50">Click to view trace</span>
+                  <h2 className="text-2xl lg:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-indigo-400 to-cyan-400">
+                    Zero-Knowledge Proofs
+                  </h2>
+                  <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
+                    LIVE
+                  </Badge>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs text-emerald-400 font-medium">LIVE</span>
+                <p className="text-cyan-100/60 max-w-2xl mx-auto">
+                  Proof of Integrity™ — Cryptographic verification that trades executed honestly, without revealing private data.
+                </p>
+              </div>
+
+              {/* ZK Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                {/* Proofs Generated */}
+                <div className="bg-slate-800/50 border border-purple-500/10 rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Fingerprint className="h-4 w-4 text-purple-400" />
+                    <span className="text-xs text-purple-300/70 uppercase tracking-wider">Proofs Generated</span>
+                  </div>
+                  <div className="text-3xl font-bold text-purple-300 font-mono">
+                    {zkStats?.totalProofsGenerated ?? 0}
+                  </div>
+                  <div className="text-xs text-cyan-100/40 mt-1">
+                    Trade: {zkStats?.circuits.tradeIntegrity.count ?? 0} • Solvency: {zkStats?.circuits.solvency.count ?? 0}
+                  </div>
+                </div>
+
+                {/* Verification Rate */}
+                <div className="bg-slate-800/50 border border-emerald-500/10 rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-400" />
+                    <span className="text-xs text-emerald-300/70 uppercase tracking-wider">Verification Rate</span>
+                  </div>
+                  <div className="text-3xl font-bold text-emerald-300 font-mono">
+                    {zkStats?.verificationSuccessRate ?? 100}%
+                  </div>
+                  <div className="text-xs text-cyan-100/40 mt-1">
+                    {zkStats?.totalVerifications ?? 0} total verifications
+                  </div>
+                </div>
+
+                {/* Avg Proof Time */}
+                <div className="bg-slate-800/50 border border-amber-500/10 rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Zap className="h-4 w-4 text-amber-400" />
+                    <span className="text-xs text-amber-300/70 uppercase tracking-wider">Avg Proof Time</span>
+                  </div>
+                  <div className="text-3xl font-bold text-amber-300 font-mono">
+                    {zkStats?.avgProvingTimeMs ? `${zkStats.avgProvingTimeMs.toFixed(1)}ms` : '<1ms'}
+                  </div>
+                  <div className="text-xs text-cyan-100/40 mt-1">
+                    {zkStats?.latestProofTimestamp
+                      ? `Latest: ${new Date(zkStats.latestProofTimestamp).toLocaleTimeString()}`
+                      : 'Awaiting first trade'
+                    }
+                  </div>
                 </div>
               </div>
 
-              {/* Table Header */}
-              <div className="grid grid-cols-12 gap-4 px-6 py-3 text-xs font-medium text-cyan-100/50 uppercase tracking-wider border-b border-cyan-500/10 bg-slate-800/30">
-                <div className="col-span-1">Side</div>
-                <div className="col-span-3">Amount</div>
-                <div className="col-span-3">Price</div>
-                <div className="col-span-3">Trace ID</div>
-                <div className="col-span-2 text-right">Latency</div>
-              </div>
-
-              {/* Trades list */}
-              <div className="divide-y divide-cyan-500/10">
-                {trades.map((trade, index) => (
-                  <div
-                    key={trade.tradeId}
-                    className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-slate-800/40 transition-colors cursor-pointer group"
-                    onClick={() => trade.traceId && window.open(getJaegerTraceUrl(trade.traceId), '_blank')}
-                  >
-                    {/* Side */}
-                    <div className="col-span-1 flex items-center">
-                      <span className={`text-xs font-semibold px-2 py-1 rounded ${trade.type === 'BUY'
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'bg-rose-500/20 text-rose-400'
-                        }`}>
-                        {trade.type}
-                      </span>
-                    </div>
-
-                    {/* Amount */}
-                    <div className="col-span-3 flex items-center">
-                      <span className="font-mono text-sm text-cyan-100">
-                        {trade.amount.toFixed(4)} <span className="text-cyan-100/50">{trade.asset.split('/')[0]}</span>
-                      </span>
-                    </div>
-
-                    {/* Price */}
-                    <div className="col-span-3 flex items-center">
-                      <span className="font-mono text-sm text-cyan-100/80">
-                        ${trade.price.toLocaleString()}
-                      </span>
-                    </div>
-
-                    {/* Trace ID */}
-                    <div className="col-span-3 flex items-center">
-                      <span className="font-mono text-xs text-cyan-100/50 group-hover:text-cyan-400 transition-colors">
-                        {trade.traceId ? trade.traceId.slice(0, 12) : trade.tradeId.slice(0, 12)}...
-                      </span>
-                      {trade.traceId && (
-                        <span className="ml-2 text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+              {/* Proof Pipeline Visualization */}
+              <div className="bg-slate-800/30 border border-cyan-500/10 rounded-2xl p-6">
+                <div className="flex items-center justify-between overflow-x-auto gap-2">
+                  {[
+                    { label: 'Trade', icon: '📊', color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/20' },
+                    { label: 'Hash', icon: '#️⃣', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20' },
+                    { label: 'Witness', icon: '🔮', color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20' },
+                    { label: 'Prove', icon: '🔐', color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
+                    { label: 'Verify ✓', icon: '✅', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+                  ].map((step, i, arr) => (
+                    <div key={step.label} className="flex items-center gap-2">
+                      <div className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl border ${step.bg} min-w-[80px]`}>
+                        <span className="text-lg">{step.icon}</span>
+                        <span className={`text-xs font-medium ${step.color}`}>{step.label}</span>
+                      </div>
+                      {i < arr.length - 1 && (
+                        <div className="flex items-center gap-0.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-pulse" style={{ animationDelay: `${i * 200}ms` }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-400/40 animate-pulse" style={{ animationDelay: `${i * 200 + 100}ms` }} />
+                          <div className="w-1.5 h-1.5 rounded-full bg-purple-400/20 animate-pulse" style={{ animationDelay: `${i * 200 + 200}ms` }} />
+                        </div>
                       )}
                     </div>
-
-                    {/* Latency */}
-                    <div className="col-span-2 flex items-center justify-end gap-2">
-                      <span className="font-mono text-sm text-amber-400">{trade.executionTimeMs}ms</span>
-                      {trade.aiVerified && (
-                        <Shield className="h-3.5 w-3.5 text-emerald-400" />
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <p className="text-xs text-cyan-100/40 text-center mt-4">
+                  Every trade generates a cryptographic proof verifiable by anyone — without revealing trader identity, exact price, or position size.
+                </p>
               </div>
 
-              {trades.length === 0 && (
-                <div className="text-center py-12 px-6">
-                  <Activity className="h-8 w-8 text-cyan-400/50 mx-auto mb-3" />
-                  <h4 className="text-lg font-medium text-cyan-100 mb-2">Waiting for trades</h4>
-                  <p className="text-sm text-cyan-100/50">
-                    Live trade data will appear here as transactions execute.
-                  </p>
+              {/* Solvency Status */}
+              {zkStats?.solvency.lastGeneratedAt && (
+                <div className="mt-4 flex items-center justify-center gap-2 text-xs text-cyan-100/40">
+                  <Shield className="h-3.5 w-3.5 text-purple-400" />
+                  <span>Solvency proof: verified {zkStats.solvencyProofAge}s ago</span>
+                  <span className="text-purple-400/60">•</span>
+                  <span className="font-mono text-purple-400/60">{zkStats.solvency.totalReserveCommitment?.slice(0, 12)}...</span>
                 </div>
               )}
             </div>
           </div>
-
 
 
           {/* Performance Metrics - Matching Live System Status Style */}
@@ -680,7 +733,7 @@ export function TransparencyDashboard() {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-cyan-100">Performance Transparency</h3>
-                    <p className="text-sm text-cyan-100/50">Real metrics from OpenTelemetry</p>
+                    <p className="text-sm text-cyan-100/50">Live metrics from Prometheus</p>
                   </div>
                 </div>
 
@@ -692,7 +745,7 @@ export function TransparencyDashboard() {
                       <span className="font-mono text-base font-semibold text-emerald-400">{status.performance.p50ResponseMs}ms</span>
                     </div>
                     <div className="h-2.5 bg-slate-800/50 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full" style={{ width: `${Math.min((status.performance.p50ResponseMs / 100) * 100, 100)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full" style={{ width: `${Math.min((status.performance.p50ResponseMs / 500) * 100, 100)}%` }} />
                     </div>
                   </div>
 
@@ -703,7 +756,7 @@ export function TransparencyDashboard() {
                       <span className="font-mono text-base font-semibold text-blue-400">{status.performance.p95ResponseMs}ms</span>
                     </div>
                     <div className="h-2.5 bg-slate-800/50 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full" style={{ width: `${Math.min((status.performance.p95ResponseMs / 200) * 100, 100)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full" style={{ width: `${Math.min((status.performance.p95ResponseMs / 1000) * 100, 100)}%` }} />
                     </div>
                   </div>
 
@@ -714,7 +767,7 @@ export function TransparencyDashboard() {
                       <span className="font-mono text-base font-semibold text-amber-400">{status.performance.p99ResponseMs}ms</span>
                     </div>
                     <div className="h-2.5 bg-slate-800/50 rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full" style={{ width: `${Math.min((status.performance.p99ResponseMs / 300) * 100, 100)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-amber-500 to-yellow-500 rounded-full" style={{ width: `${Math.min((status.performance.p99ResponseMs / 2000) * 100, 100)}%` }} />
                     </div>
                   </div>
                 </div>
@@ -798,7 +851,7 @@ export function TransparencyDashboard() {
 
 
           {/* Footer */}
-          <div className="text-center text-sm text-cyan-100/60 pt-8 space-y-3 animate-in fade-in duration-1000 delay-1000">
+          <div className="text-center text-sm text-cyan-100/60 pt-8 space-y-4 animate-in fade-in duration-1000 delay-1000">
             <p className="font-mono">Last updated: {status.timestamp ? new Date(status.timestamp).toLocaleString() : 'N/A'}</p>
             <div className="flex items-center justify-center gap-2">
               <Shield className="h-4 w-4 text-cyan-400" />
@@ -806,9 +859,17 @@ export function TransparencyDashboard() {
                 Building trust through transparency • Powered by OpenTelemetry
               </p>
             </div>
+            <div className="border-t border-cyan-500/10 pt-4 mt-4 max-w-2xl mx-auto">
+              <p className="text-xs text-cyan-100/40 leading-relaxed">
+                Krystaline.io is an observability technology demonstration platform. No real cryptocurrency or fiat currency is held, traded, or transferred.
+                All balances and transactions are simulated for demonstration purposes. Market data is sourced from public Binance feeds.
+                This platform is not a regulated financial service and does not constitute investment advice.
+                © {new Date().getFullYear()} Krystaline.io — Technology Demo
+              </p>
+            </div>
           </div>
         </div>
       </div>
-    </Layout>
+    </Layout >
   );
 }

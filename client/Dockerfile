@@ -1,5 +1,5 @@
 # Development Dockerfile for Vite frontend
-FROM node:20-bullseye-slim
+FROM node:22-bullseye-slim
 WORKDIR /app
 
 # Install dependencies (copy lockfile for faster, reproducible installs)

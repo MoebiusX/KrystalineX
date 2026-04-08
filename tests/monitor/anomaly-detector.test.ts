@@ -223,11 +223,11 @@ describe('AnomalyDetector', () => {
             // SEV 1: deviation >= 3.3σ
             
             const thresholds = {
-                sev5: 1.3,
-                sev4: 1.65,
-                sev3: 2.0,
-                sev2: 2.6,
-                sev1: 3.3
+                sev5: 2.0,
+                sev4: 3.0,
+                sev3: 4.0,
+                sev2: 5.0,
+                sev1: 6.0
             };
 
             expect(thresholds.sev1).toBeGreaterThan(thresholds.sev2);

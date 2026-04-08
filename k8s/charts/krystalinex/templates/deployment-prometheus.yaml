@@ -36,7 +36,10 @@ spec:
             - '--config.file=/etc/prometheus/prometheus.yml'
             - '--storage.tsdb.path=/prometheus'
             - '--storage.tsdb.no-lockfile'
+            - '--storage.tsdb.retention.time=12h'
+            - '--storage.tsdb.retention.size=2GB'
             - '--web.external-url=/prometheus/'
+            - '--enable-feature=exemplar-storage'
           ports:
             - name: http
               containerPort: 9090

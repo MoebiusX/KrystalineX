@@ -1,5 +1,5 @@
 # Prometheus Configuration for Krystaline Exchange
-# Scrapes metrics from all services
+# Scrapes metrics from all services (aligned with K8s ConfigMap)
 
 global:
   scrape_interval: 15s
@@ -11,9 +11,10 @@ alerting:
     - static_configs:
         - targets: ['alertmanager:9093']
 
-# Load alerting rules
+# Load alerting and recording rules
 rule_files:
   - /etc/prometheus/alerting-rules.yml
+  - /etc/prometheus/recording-rules.yml
 
 scrape_configs:
   # ============================================
@@ -21,14 +22,14 @@ scrape_configs:
   # ============================================
 
   # Krystaline Exchange API (main Express server)
-  - job_name: 'krystaline-exchange'
+  - job_name: 'krystalinex-server'
     static_configs:
       - targets: ['host.docker.internal:5000']
     metrics_path: /metrics
     scrape_interval: 10s
 
-  # Order Matcher / Payment Processor (runs natively on host)
-  - job_name: 'order-matcher'
+  # Payment Processor / Order Matcher (runs natively on host)
+  - job_name: 'payment-processor'
     static_configs:
       - targets: ['host.docker.internal:3001']
     metrics_path: /metrics
@@ -62,16 +63,86 @@ scrape_configs:
   # ============================================
 
   # Node Exporter - OS/Host metrics (CPU, memory, disk, network)
-  - job_name: 'node'
+  - job_name: 'node-exporter'
     static_configs:
       - targets: ['node-exporter:9100']
     scrape_interval: 15s
 
   # ============================================
-  # OBSERVABILITY STACK
+  # OBSERVABILITY STACK METRICS
   # ============================================
 
   # Prometheus itself
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+
+  # OpenTelemetry Collector internal metrics
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Jaeger internal metrics
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Grafana internal metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # Redis metrics (via redis_exporter)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 15s
+
+  # Kong API Gateway (Prometheus plugin)
+  - job_name: 'kong'
+    static_configs:
+      - targets: ['kong-gateway:8100']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # ============================================
+  # ALERTING & LOG PIPELINE METRICS
+  # ============================================
+
+  # Alertmanager internal metrics
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Loki (log aggregation) internal metrics
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Promtail (log shipper) internal metrics
+  - job_name: 'promtail'
+    static_configs:
+      - targets: ['promtail:9080']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # ============================================
+  # AI / ML SERVICES
+  # ============================================
+
+  # Bayesian Inference Service (PyMC + FastAPI)
+  - job_name: 'bayesian-service'
+    static_configs:
+      - targets: ['bayesian-service:8100']
+    metrics_path: /metrics
+    scrape_interval: 30s

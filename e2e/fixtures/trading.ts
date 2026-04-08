@@ -22,44 +22,38 @@ export async function getWalletBalance(page: Page): Promise<WalletBalance> {
     // Wait for portfolio to load - use regex for i18n
     await page.getByText(/Your Portfolio|Tu Portafolio/i).waitFor({ timeout: 10000 });
 
-    // Wait a bit for data to load
-    await page.waitForTimeout(500);
+    // Wait for data to load
+    await page.waitForTimeout(1000);
 
     let btc = 0;
     let usd = 0;
     let totalValue = 0;
 
     try {
-        // Find the paragraph that contains "BTC Balance" text, then get the next sibling paragraph with the value
-        // Based on error context: paragraph "BTC Balance" [ref=e100], paragraph "1.000000" [ref=e101]
-        const btcLabelLocator = page.locator('p').filter({ hasText: /^BTC Balance$/i });
-        if (await btcLabelLocator.count() > 0) {
-            // The balance value is in a sibling paragraph immediately after the label
-            const btcValueLocator = btcLabelLocator.locator('xpath=following-sibling::p[1]');
-            const btcText = await btcValueLocator.textContent() || '0';
-            btc = parseFloat(btcText.replace(/[^0-9.]/g, '')) || 0;
-        }
+        // BTC card: <div> containing <span>BTC</span> → sibling <p> with "1.000000"
+        const btcCard = page.locator('div').filter({ hasText: /^₿BTC/ }).first();
+        const btcValue = btcCard.locator('p').first();
+        const btcText = await btcValue.textContent({ timeout: 3000 }) || '0';
+        btc = parseFloat(btcText.replace(/[^0-9.]/g, '')) || 0;
     } catch { btc = 0; }
 
     try {
-        // Find the paragraph that contains "USD Balance" text, then get the next sibling paragraph with the value
-        const usdLabelLocator = page.locator('p').filter({ hasText: /^USD Balance$/i });
-        if (await usdLabelLocator.count() > 0) {
-            const usdValueLocator = usdLabelLocator.locator('xpath=following-sibling::p[1]');
-            const usdText = await usdValueLocator.textContent() || '0';
-            usd = parseFloat(usdText.replace(/[^0-9,.]/g, '')) || 0;
-        }
+        // USD card: <div> containing <span>USD</span> → sibling <p> with "5,000.00"
+        const usdCard = page.locator('div').filter({ hasText: /^\$USD/ }).first();
+        const usdValue = usdCard.locator('p').first();
+        const usdText = await usdValue.textContent({ timeout: 3000 }) || '0';
+        usd = parseFloat(usdText.replace(/[^0-9.]/g, '')) || 0;
     } catch { usd = 0; }
 
     try {
-        // Get total balance from header section
-        const totalLocator = page.locator('p').filter({ hasText: /^Total Balance \(USD\)$/i });
-        if (await totalLocator.count() > 0) {
-            const totalValueLocator = totalLocator.locator('xpath=following-sibling::p[1]');
-            const totalText = await totalValueLocator.textContent() || '0';
-            totalValue = parseFloat(totalText.replace(/[^0-9,.]/g, '')) || 0;
+        // Total balance: <p>Total Balance (USD)</p> followed by <p>$72,325.49</p>
+        const totalLabel = page.locator('p').filter({ hasText: /^Total Balance \(USD\)$/i });
+        if (await totalLabel.count() > 0) {
+            const totalValueEl = totalLabel.locator('xpath=following-sibling::p[1]');
+            const totalText = await totalValueEl.textContent({ timeout: 3000 }) || '0';
+            totalValue = parseFloat(totalText.replace(/[^0-9.]/g, '')) || 0;
         } else {
-            totalValue = btc * 80000 + usd; // Fallback calculation
+            totalValue = btc * 80000 + usd;
         }
     } catch { totalValue = btc * 80000 + usd; }
 
@@ -81,14 +75,36 @@ export async function submitBuyOrder(page: Page, amount: number): Promise<void> 
     // Click BUY toggle button
     await page.getByRole('button', { name: /^BUY$/i }).click();
 
-    // Fill amount
+    // Fill amount (minimum order size is 0.001 BTC)
     await page.locator('input[type="number"]').first().fill(amount.toString());
 
     // Submit order - button text is "Buy X.XXXX BTC"
     await page.getByRole('button', { name: /Buy.*BTC/i }).click();
 
-    // Wait for execution toast or confirmation - target the heading specifically to avoid strict mode violation
-    await page.getByRole('heading', { name: /Trade.*Executed|Order Submitted|Operaci.n.*Ejecutad/i }).first().waitFor({ timeout: 15000 });
+    // Wait for execution confirmation - modal "Trade Verified ✓", banner "Trade Executed & Traced", or toast
+    await page.getByRole('heading', { name: /Trade.*Verified|Trade.*Executed|Order Submitted|Operaci.n.*Ejecutad/i })
+        .or(page.locator('text=/Trade.*Verified|Trade.*Executed/'))
+        .first()
+        .waitFor({ timeout: 15000 });
+
+    // Close ALL open dialogs — there may be multiple (onboarding + trade verified)
+    // Target the trade verified dialog specifically first
+    const tradeDialog = page.locator('div[role="dialog"]').filter({ hasText: /Trade Verified/ });
+    if (await tradeDialog.isVisible({ timeout: 2000 }).catch(() => false)) {
+        // Click Close button within this specific dialog
+        const closeBtn = tradeDialog.getByRole('button', { name: /^Close$/i }).first();
+        if (await closeBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+            await closeBtn.click();
+        }
+        // Wait for it to close, fallback to Escape
+        const stillOpen = await tradeDialog.isVisible({ timeout: 1000 }).catch(() => false);
+        if (stillOpen) {
+            await page.keyboard.press('Escape');
+        }
+    }
+    // Ensure no dialogs remain open
+    await page.locator('div[role="dialog"]').first()
+        .waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
 }
 
 /**
@@ -112,8 +128,8 @@ export async function submitSellOrder(page: Page, amount: number): Promise<void>
     // Submit order - button text is "Sell X.XXXX BTC"
     await page.getByRole('button', { name: /Sell.*BTC/i }).click();
 
-    // Wait for execution toast or confirmation - target the heading specifically to avoid strict mode violation
-    await page.getByRole('heading', { name: /Trade.*Executed|Order Submitted|Operaci.n.*Ejecutad/i }).first().waitFor({ timeout: 15000 });
+    // Wait for execution confirmation - modal "Trade Verified ✓", banner "Trade Executed & Traced", or toast
+    await page.getByRole('heading', { name: /Trade.*Verified|Trade.*Executed|Order Submitted|Operaci.n.*Ejecutad/i }).first().waitFor({ timeout: 15000 });
 }
 
 /**

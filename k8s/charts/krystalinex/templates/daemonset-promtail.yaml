@@ -23,6 +23,10 @@ spec:
           image: "{{ .Values.promtail.image.repository }}:{{ .Values.promtail.image.tag }}"
           args:
             - -config.file=/etc/promtail/promtail.yaml
+          ports:
+            - name: http-metrics
+              containerPort: 9080
+              protocol: TCP
           volumeMounts:
             - name: config
               mountPath: /etc/promtail
@@ -131,6 +135,24 @@ data:
               stages:
                 - static_labels:
                     level: unknown
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-promtail
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: promtail
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 9080
+      targetPort: http-metrics
+      name: http-metrics
+  selector:
+    {{- include "krystalinex.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: promtail
 ---
 apiVersion: v1
 kind: ServiceAccount
