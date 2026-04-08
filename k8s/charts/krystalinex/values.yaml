@@ -357,7 +357,7 @@ grafana:
       memory: 256Mi
 
 ollama:
-  enabled: false  # Disabled by default, enable for AI trace analysis
+  enabled: true  # Enabled for AI trace analysis
   image:
     repository: ollama/ollama
     tag: latest
