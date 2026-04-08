@@ -614,6 +614,33 @@ The cluster is **healthy and stable** with generous headroom on both active node
 
 ---
 
+## Monorepo Integration (git subtree)
+
+This directory is maintained as a **git subtree** of the standalone repo [`MoebiusX/otel-mcp-server`](https://github.com/MoebiusX/otel-mcp-server). The standalone repo is the **single source of truth**.
+
+### Pull latest changes from upstream
+
+```bash
+cd /path/to/KrystalineX
+git subtree pull --prefix=otel-mcp-server otel-upstream master --squash
+```
+
+### Push monorepo changes back upstream
+
+```bash
+cd /path/to/KrystalineX
+git subtree push --prefix=otel-mcp-server otel-upstream master
+```
+
+### Initial setup (already done)
+
+```bash
+git remote add otel-upstream https://github.com/MoebiusX/otel-mcp-server.git
+git subtree add --prefix=otel-mcp-server otel-upstream master --squash
+```
+
+> **Note:** `src/client.ts` is currently monorepo-only. Push it upstream when ready.
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
