@@ -4,3 +4,4 @@ dist/
 .env
 auth-keys.json
 .DS_Store
+cluster-report-*.txt
