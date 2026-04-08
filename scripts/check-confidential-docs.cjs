@@ -14,8 +14,7 @@ const path = require('path');
 
 // Patterns for confidential files that must NEVER be committed
 const CONFIDENTIAL_PATTERNS = [
-  // Whitepaper and related docs
-  'docs/OBSERVABILITY_WHITEPAPER.md',
+  // Internal-only documentation
   'docs/OBSERVABILITY_ADOPTION_GUIDE.md',
   'docs/OBSERVABILITY_MATHEMATICS.md',
 
@@ -36,7 +35,7 @@ const CONFIDENTIAL_REGEXES = [
   /^docs\/api\//,
   /^docs.*\.zip$/,
   /^docs-bundle\.zip$/,
-  /^docs\/OBSERVABILITY_/,
+  /^docs\/OBSERVABILITY_(?!WHITEPAPER)/,  // exclude whitepaper (public)
 ];
 
 function getTrackedFiles() {

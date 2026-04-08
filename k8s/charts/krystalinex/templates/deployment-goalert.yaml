@@ -136,7 +136,7 @@ spec:
             - name: GOALERT_DATA_ENCRYPTION_KEY
               value: {{ .Values.secrets.goalertEncryptionKey | default "CHANGE_ME_GENERATE_KEY" | quote }}
             - name: GOALERT_ADMIN_PASS
-              value: {{ .Values.goalert.provision.adminPassword | default "REDACTED" | quote }}
+              value: {{ required "goalert.provision.adminPassword must be set in values-secrets.yaml" .Values.goalert.provision.adminPassword | quote }}
         {{- end }}
       containers:
         - name: goalert

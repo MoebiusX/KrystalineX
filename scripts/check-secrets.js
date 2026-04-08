@@ -26,7 +26,7 @@ const SECRET_PATTERNS = [
   { pattern: /(?:auth[_-]?token|authtoken)\s*[:=]\s*['"][^'"]{10,}['"]/gi, name: 'Auth Token' },
   
   // Database credentials
-  { pattern: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{4,}['"]/gi, name: 'Password', exclude: ['test', 'example', 'placeholder', 'your-', 'process.env', 'CHANGE_ME', 'change_me'] },
+  { pattern: /(?:password|passwd|pwd)\s*[:=]\s*['"][^'"]{4,}['"]/gi, name: 'Password', exclude: ['test', 'example', 'placeholder', 'your-', 'process.env', 'CHANGE_ME', 'change_me', 'synthetic'] },
   
   // AWS
   { pattern: /AKIA[0-9A-Z]{16}/g, name: 'AWS Access Key ID' },

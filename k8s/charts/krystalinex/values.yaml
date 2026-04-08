@@ -194,8 +194,9 @@ goalert:
     size: 5Gi
   provision:
     enabled: true
-    adminPassword: "REDACTED"
-    carlosPassword: "REDACTED"
+    # Passwords must be set in values-secrets.yaml (never commit real passwords)
+    adminPassword: ""
+    carlosPassword: ""
   integrationTokens:
     general: "99f40a5f-b3dc-43ae-8dc3-1ec0ea77ae14"
     critical: "8d5aa492-5110-48c8-ba7a-f751eaed9fb5"
