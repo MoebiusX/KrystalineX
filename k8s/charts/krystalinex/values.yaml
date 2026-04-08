@@ -15,7 +15,7 @@ server:
   replicaCount: 1
   image:
     repository: moebiusx/krystalinex-server
-    tag: v2.10.0
+    tag: v3.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -67,7 +67,7 @@ paymentProcessor:
   replicaCount: 1
   image:
     repository: moebiusx/krystalinex-payment-processor
-    tag: v1.3.0
+    tag: v2.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -97,7 +97,7 @@ frontend:
   replicaCount: 1
   image:
     repository: moebiusx/krystalinex-frontend
-    tag: v2.1.25
+    tag: v3.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -380,7 +380,7 @@ otelMcpServer:
   enabled: true
   image:
     repository: moebiusx/otel-mcp-server
-    tag: v1.4.0
+    tag: v2.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -404,7 +404,7 @@ bayesianService:
   enabled: true
   image:
     repository: moebiusx/bayesian-service
-    tag: v1.2.0
+    tag: v2.0.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
