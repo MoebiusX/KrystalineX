@@ -287,7 +287,7 @@ export default function Monitor() {
 
     const ratingMutation = useMutation({
         mutationFn: async ({ rating, correction }: { rating: 'good' | 'bad'; correction?: string }) => {
-            if (!selectedAnomaly || !analyzeMutation.data) return;
+            if (!selectedAnomaly || !analyzeMutation.data || (analyzeMutation.data as any).status === 'processing') return;
 
             // Use the EXACT prompt and response from the LLM call
             const res = await fetch("/api/v1/monitor/training/rate", {
@@ -308,7 +308,7 @@ export default function Monitor() {
                     },
                     // Use exact prompt and response from the analysis (for training)
                     prompt: analyzeMutation.data.prompt || `Analyze anomaly: ${selectedAnomaly.service}:${selectedAnomaly.operation}`,
-                    completion: analyzeMutation.data.rawResponse || `${analyzeMutation.data.summary}\n\nCauses: ${analyzeMutation.data.possibleCauses.join(', ')}\n\nRecommendations: ${analyzeMutation.data.recommendations.join(', ')}`,
+                    completion: analyzeMutation.data.rawResponse || `${analyzeMutation.data.summary}\n\nCauses: ${(analyzeMutation.data.possibleCauses || []).join(', ')}\n\nRecommendations: ${(analyzeMutation.data.recommendations || []).join(', ')}`,
                     rating,
                     correction,
                 }),
@@ -670,29 +670,39 @@ export default function Monitor() {
                                     </Button>
                                 </div>
 
-                                {analyzeMutation.data && (
+                                {analyzeMutation.data && (analyzeMutation.data as any).status === 'processing' && (
+                                    <div className="bg-slate-800 rounded-lg p-5 space-y-4 border border-slate-700">
+                                        <div className="flex items-center gap-3">
+                                            <div className="animate-spin h-5 w-5 border-2 border-emerald-400 border-t-transparent rounded-full" />
+                                            <div className="text-base text-emerald-400 font-medium">Analysis in progress...</div>
+                                        </div>
+                                        <div className="text-sm text-slate-400">Results will stream in the Live Analysis panel via WebSocket.</div>
+                                    </div>
+                                )}
+
+                                {analyzeMutation.data && analyzeMutation.data.summary && (
                                     <div className="bg-slate-800 rounded-lg p-5 space-y-4 border border-slate-700">
                                         <div>
                                             <div className="text-base text-slate-400 mb-2 font-medium">Summary</div>
                                             <div className="text-base text-white leading-relaxed">{analyzeMutation.data.summary}</div>
                                         </div>
 
-                                        {analyzeMutation.data.possibleCauses.length > 0 && (
+                                        {analyzeMutation.data.possibleCauses?.length > 0 && (
                                             <div>
                                                 <div className="text-base text-slate-400 mb-2 font-medium">Possible Causes</div>
                                                 <ul className="list-disc list-inside text-base text-white space-y-2">
-                                                    {analyzeMutation.data.possibleCauses.map((cause, i) => (
+                                                    {analyzeMutation.data.possibleCauses.map((cause: string, i: number) => (
                                                         <li key={i} className="leading-relaxed">{cause}</li>
                                                     ))}
                                                 </ul>
                                             </div>
                                         )}
 
-                                        {analyzeMutation.data.recommendations.length > 0 && (
+                                        {analyzeMutation.data.recommendations?.length > 0 && (
                                             <div>
                                                 <div className="text-base text-slate-400 mb-2 font-medium">Recommendations</div>
                                                 <ul className="list-disc list-inside text-base text-emerald-400 space-y-2">
-                                                    {analyzeMutation.data.recommendations.map((rec, i) => (
+                                                    {analyzeMutation.data.recommendations.map((rec: string, i: number) => (
                                                         <li key={i} className="leading-relaxed">{rec}</li>
                                                     ))}
                                                 </ul>
