@@ -33,6 +33,7 @@ import { binanceFeed } from "./services/binance-feed";
 import { coingeckoFeed } from "./services/coingecko-feed";
 import { priceFeedManager } from "./services/price-feed-manager";
 import { createUserContextMiddleware } from "./middleware/user-context";
+import { chaosMiddleware } from "./middleware/chaos";
 
 const logger = createLogger('server');
 const app = express();
@@ -59,6 +60,9 @@ app.use('/api/v1', generalRateLimiter);
 
 // Apply metrics collection middleware
 app.use(metricsMiddleware);
+
+// Chaos injection (after metrics so delays appear in histograms)
+app.use(chaosMiddleware);
 
 // Request timeout (30 seconds)
 app.use(requestTimeout(30000));
