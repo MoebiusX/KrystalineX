@@ -66,7 +66,7 @@ lora-anomaly-analyzer/tokenizer.json
 # Confidential
 docs/bizait lab network.md
 
-values-secrets.yaml
+values-*secrets*.yaml
 
 # VPN configs
 *.ovpn
