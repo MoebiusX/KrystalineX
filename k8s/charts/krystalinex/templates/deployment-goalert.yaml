@@ -30,6 +30,8 @@ spec:
               value: {{ .Values.secrets.goalertDbPassword | default "CHANGE_ME" | quote }}
             - name: POSTGRES_DB
               value: "goalert"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - name: postgres
               containerPort: 5432

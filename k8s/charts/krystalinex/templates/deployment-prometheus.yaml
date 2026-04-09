@@ -29,6 +29,10 @@ spec:
                   app.kubernetes.io/component: prometheus
               topologyKey: kubernetes.io/hostname
       {{- end }}
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+        runAsGroup: 65534
       containers:
         - name: prometheus
           image: "{{ .Values.prometheus.image.repository }}:{{ .Values.prometheus.image.tag }}"
