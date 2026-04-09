@@ -112,10 +112,10 @@ class MonitorWebSocketServer {
     /**
      * Notify clients of analysis completion
      */
-    analysisComplete(anomalyIds: string[], summary: string): void {
+    analysisComplete(anomalyIds: string[], data: any): void {
         this.broadcast({
             type: 'analysis-complete',
-            data: summary,
+            data,
             anomalyIds,
             timestamp: new Date().toISOString()
         });

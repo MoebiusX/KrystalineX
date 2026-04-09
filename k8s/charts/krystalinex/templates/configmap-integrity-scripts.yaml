@@ -1,0 +1,14 @@
+{{- if .Values.integrityMonitor.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "krystalinex.fullname" . }}-integrity-scripts
+  labels:
+    {{- include "krystalinex.labels" . | nindent 4 }}
+    app.kubernetes.io/component: integrity-monitor
+data:
+  config.js: |
+{{ .Files.Get "scripts/config.js" | indent 4 }}
+  dashboard-integrity-monitor.js: |
+{{ .Files.Get "scripts/dashboard-integrity-monitor.js" | indent 4 }}
+{{- end }}

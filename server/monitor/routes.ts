@@ -13,6 +13,8 @@ import { trainingStore } from './training-store';
 import { amountProfiler } from './amount-profiler';
 import { amountAnomalyDetector } from './amount-anomaly-detector';
 import { topologyService } from './topology-service';
+import { analysisService } from './analysis-service';
+import { wsServer } from './ws-server';
 import { createLogger } from '../lib/logger';
 import { getErrorMessage } from '../lib/errors';
 import type {
@@ -138,14 +140,24 @@ router.post('/analyze', async (req, res) => {
         };
     }
 
-    // Enqueue into stream analyzer — results arrive via WebSocket
-    // This returns immediately instead of blocking for 2-3 minutes
-    const { streamAnalyzer } = await import('./stream-analyzer');
-    await streamAnalyzer.enqueue(anomaly);
+    // Notify clients that analysis is starting
+    wsServer.analysisStart([anomaly.id]);
+
+    // Run analysis in background — structured result arrives via WebSocket
+    // Uses analysisService for rich context enrichment (trace, metrics, logs, topology)
+    // and structured parsing (SUMMARY, CAUSES, RECOMMENDATIONS, CONFIDENCE)
+    analysisService.analyzeAnomaly(anomaly).then(analysis => {
+        wsServer.analysisComplete([anomaly!.id], analysis);
+        logger.info({ traceId, confidence: analysis.confidence }, 'Analysis complete, broadcast via WebSocket');
+    }).catch(err => {
+        const errorMsg = `Analysis failed: ${getErrorMessage(err)}`;
+        wsServer.analysisComplete([anomaly!.id], errorMsg);
+        logger.error({ err, traceId }, 'Background analysis failed');
+    });
 
     res.json({
         status: 'processing',
-        message: 'Analysis enqueued — results will stream via WebSocket',
+        message: 'Analysis started — structured results will arrive via WebSocket',
         traceId,
         anomalyId: anomaly.id
     });

@@ -150,6 +150,7 @@ export default function Monitor() {
     const [liveAlerts, setLiveAlerts] = useState<LiveAlert[]>([]);
     const [wsConnected, setWsConnected] = useState<boolean>(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [wsAnalysisResult, setWsAnalysisResult] = useState<AnalysisResponse | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
 
     // WebSocket connection
@@ -189,6 +190,10 @@ export default function Monitor() {
                     case 'analysis-complete':
                         setIsStreaming(false);
                         setLastUpdated(new Date());
+                        // If structured analysis data arrived, populate AI Analysis card
+                        if (msg.data && typeof msg.data === 'object' && msg.data.summary) {
+                            setWsAnalysisResult(msg.data as AnalysisResponse);
+                        }
                         break;
 
                     case 'alert':
@@ -334,6 +339,7 @@ export default function Monitor() {
         setSelectedAnomaly(anomaly);
         analyzeMutation.reset();
         correlationMutation.reset();
+        setWsAnalysisResult(null);
         // Auto-fetch correlated metrics
         correlationMutation.mutate(anomaly);
     };
@@ -343,6 +349,7 @@ export default function Monitor() {
         setSelectedAnomaly(null);
         analyzeMutation.reset();
         correlationMutation.reset();
+        setWsAnalysisResult(null);
     };
 
     // Get severity badge styling
@@ -670,39 +677,43 @@ export default function Monitor() {
                                     </Button>
                                 </div>
 
-                                {analyzeMutation.data && (analyzeMutation.data as any).status === 'processing' && (
+                                {analyzeMutation.data && (analyzeMutation.data as any).status === 'processing' && !wsAnalysisResult && (
                                     <div className="bg-slate-800 rounded-lg p-5 space-y-4 border border-slate-700">
                                         <div className="flex items-center gap-3">
                                             <div className="animate-spin h-5 w-5 border-2 border-emerald-400 border-t-transparent rounded-full" />
                                             <div className="text-base text-emerald-400 font-medium">Analysis in progress...</div>
                                         </div>
-                                        <div className="text-sm text-slate-400">Results will stream in the Live Analysis panel via WebSocket.</div>
+                                        <div className="text-sm text-slate-400">Enriching trace context and running LLM analysis. Results will appear here when complete.</div>
                                     </div>
                                 )}
 
-                                {analyzeMutation.data && analyzeMutation.data.summary && (
+                                {(() => {
+                                    // Use WebSocket result (async) or cached result from HTTP (cache hit)
+                                    const analysis = wsAnalysisResult || (analyzeMutation.data?.summary ? analyzeMutation.data : null);
+                                    if (!analysis) return null;
+                                    return (
                                     <div className="bg-slate-800 rounded-lg p-5 space-y-4 border border-slate-700">
                                         <div>
                                             <div className="text-base text-slate-400 mb-2 font-medium">Summary</div>
-                                            <div className="text-base text-white leading-relaxed">{analyzeMutation.data.summary}</div>
+                                            <div className="text-base text-white leading-relaxed">{analysis.summary}</div>
                                         </div>
 
-                                        {analyzeMutation.data.possibleCauses?.length > 0 && (
+                                        {analysis.possibleCauses?.length > 0 && (
                                             <div>
                                                 <div className="text-base text-slate-400 mb-2 font-medium">Possible Causes</div>
                                                 <ul className="list-disc list-inside text-base text-white space-y-2">
-                                                    {analyzeMutation.data.possibleCauses.map((cause: string, i: number) => (
+                                                    {analysis.possibleCauses.map((cause: string, i: number) => (
                                                         <li key={i} className="leading-relaxed">{cause}</li>
                                                     ))}
                                                 </ul>
                                             </div>
                                         )}
 
-                                        {analyzeMutation.data.recommendations?.length > 0 && (
+                                        {analysis.recommendations?.length > 0 && (
                                             <div>
                                                 <div className="text-base text-slate-400 mb-2 font-medium">Recommendations</div>
                                                 <ul className="list-disc list-inside text-base text-emerald-400 space-y-2">
-                                                    {analyzeMutation.data.recommendations.map((rec: string, i: number) => (
+                                                    {analysis.recommendations.map((rec: string, i: number) => (
                                                         <li key={i} className="leading-relaxed">{rec}</li>
                                                     ))}
                                                 </ul>
@@ -713,14 +724,14 @@ export default function Monitor() {
                                             <span className="text-slate-400 text-base">Confidence:</span>
                                             <Badge
                                                 variant="outline"
-                                                className={`text-base px-3 ${analyzeMutation.data.confidence === 'high'
+                                                className={`text-base px-3 ${analysis.confidence === 'high'
                                                     ? 'border-emerald-500 text-emerald-400'
-                                                    : analyzeMutation.data.confidence === 'medium'
+                                                    : analysis.confidence === 'medium'
                                                         ? 'border-amber-500 text-amber-400'
                                                         : 'border-slate-500 text-slate-400'
                                                     }`}
                                             >
-                                                {analyzeMutation.data.confidence}
+                                                {analysis.confidence}
                                             </Badge>
                                         </div>
 
@@ -748,7 +759,8 @@ export default function Monitor() {
                                             )}
                                         </div>
                                     </div>
-                                )}
+                                    );
+                                })()}
 
                                 {/* Correction Modal */}
                                 {showCorrectionModal && (
