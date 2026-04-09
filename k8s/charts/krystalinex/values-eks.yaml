@@ -1,0 +1,147 @@
+# KrystalineX EKS Override Values
+# Usage: helm template kx krystalinex -f krystalinex/values.yaml -f krystalinex/values-eks.yaml -f krystalinex/values-secrets.yaml
+
+global:
+  storageClass: "gp3"
+
+# =============================================================================
+# CORE APPLICATION — same images, cloud-ready resource tuning
+# =============================================================================
+
+server:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+paymentProcessor:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+frontend:
+  replicaCount: 2
+
+# =============================================================================
+# INFRASTRUCTURE — EBS-backed persistence (dynamic provisioning)
+# =============================================================================
+
+postgresql:
+  primary:
+    persistence:
+      size: 20Gi
+
+rabbitmq:
+  persistence:
+    size: 10Gi
+
+redis:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# =============================================================================
+# OBSERVABILITY — sized for cloud
+# =============================================================================
+
+jaeger:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+    requests:
+      cpu: 250m
+      memory: 2Gi
+
+prometheus:
+  persistence:
+    size: 20Gi
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+loki:
+  persistence:
+    size: 10Gi
+
+grafana:
+  persistence:
+    size: 10Gi
+
+# =============================================================================
+# OLLAMA — disabled by default on EKS (CPU-only is too slow)
+# Enable if using GPU instances (p3/g4/g5)
+# =============================================================================
+
+ollama:
+  enabled: false
+
+# =============================================================================
+# DEV-ONLY SERVICES — disabled for cloud
+# =============================================================================
+
+maildev:
+  enabled: false
+
+# =============================================================================
+# INGRESS — nginx with AWS NLB
+# =============================================================================
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    # Use longer timeouts for WebSocket/SSE connections
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: www.krystaline.io
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+        - path: /api
+          pathType: Prefix
+          service: server
+        - path: /grafana
+          pathType: Prefix
+          service: grafana
+        - path: /jaeger
+          pathType: Prefix
+          service: jaeger
+        - path: /prometheus
+          pathType: Prefix
+          service: prometheus
+        - path: /alertmanager
+          pathType: Prefix
+          service: alertmanager
+  tls: []
+
+# =============================================================================
+# SECRETS — must be created (set values in values-secrets.yaml)
+# =============================================================================
+
+secrets:
+  create: true

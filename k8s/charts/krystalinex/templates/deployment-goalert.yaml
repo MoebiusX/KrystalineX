@@ -73,7 +73,9 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: {{ .Values.goalert.persistence.storageClass | default "local-storage" }}
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .Values.goalert.persistence.size | default "5Gi" }}

@@ -1,0 +1,42 @@
+# eksctl ClusterConfig for KrystalineX on AWS EKS
+# Region: eu-west-1 (Ireland)
+# Usage: eksctl create cluster -f k8s/eks/cluster.yaml
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: krystalinex
+  region: eu-west-1
+  version: "1.32"
+  tags:
+    project: krystalinex
+    environment: staging
+
+iam:
+  withOIDC: true
+
+addons:
+  - name: vpc-cni
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+  - name: coredns
+  - name: kube-proxy
+  - name: aws-ebs-csi-driver
+    wellKnownPolicies:
+      ebsCSIController: true
+
+managedNodeGroups:
+  - name: kx-workers
+    instanceType: t3.xlarge
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 4
+    volumeSize: 80
+    volumeType: gp3
+    labels:
+      role: worker
+    tags:
+      project: krystalinex
+    iam:
+      withAddonPolicies:
+        ebs: true

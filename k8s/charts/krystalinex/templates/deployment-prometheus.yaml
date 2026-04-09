@@ -77,7 +77,9 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: local-storage
+        {{- if $.Values.global.storageClass }}
+        storageClassName: {{ $.Values.global.storageClass }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.prometheus.persistence.size }}
