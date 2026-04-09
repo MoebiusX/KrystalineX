@@ -31,6 +31,21 @@ export class TraceProfiler {
     private baselines: Map<string, SpanBaseline> = new Map();
     private pollInterval: NodeJS.Timeout | null = null;
     private isRunning = false;
+    private frozen = false;
+
+    /**
+     * Freeze baselines — skip updates while chaos is active
+     * so the anomaly detector compares against pre-chaos values.
+     */
+    freezeBaselines(): void {
+        this.frozen = true;
+        logger.info('Baselines frozen (chaos active)');
+    }
+
+    unfreezeBaselines(): void {
+        this.frozen = false;
+        logger.info('Baselines unfrozen (chaos stopped)');
+    }
 
     /**
      * Start the profiler polling loop
@@ -80,6 +95,11 @@ export class TraceProfiler {
      * Collect traces and update baselines
      */
     private async collectAndUpdate(): Promise<void> {
+        if (this.frozen) {
+            logger.debug('Baselines frozen, skipping update');
+            return;
+        }
+
         try {
             const allSpans: Array<{ span: JaegerSpan; service: string }> = [];
 

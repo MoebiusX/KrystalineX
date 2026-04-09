@@ -20,15 +20,15 @@ const JAEGER_API_URL = config.observability.jaegerUrl;
 const DETECTION_INTERVAL = 10000; // 10 seconds
 const ANOMALY_WINDOW = 5 * 60 * 1000; // 5 minutes - keep anomalies for this long
 
-// Default thresholds (used without adaptive baselines)
+// Default thresholds (standard deviations from mean)
 const DEFAULT_THRESHOLDS = {
-    sev5: 6.6,   // ~80th percentile
-    sev4: 9.3,  // ~90th percentile
-    sev3: 12.0,   // ~95th percentile
-    sev2: 17.2,   // ~99th percentile
-    sev1: 20.6,   // ~99.9th percentile
+    sev5: 3.0,   // Unusual — ~0.1% in normal distribution
+    sev4: 4.0,   // Significant — ~0.003%
+    sev3: 5.0,   // Severe — practically never in normal traffic
+    sev2: 6.0,   // Critical
+    sev1: 8.0,   // Catastrophic
 };
-const MIN_SAMPLES = 500;       // Need at least 10 samples for reliable baseline
+const MIN_SAMPLES = 10;       // Need at least 10 samples for reliable baseline
 
 export class AnomalyDetector {
     private anomalies: Map<string, Anomaly> = new Map();

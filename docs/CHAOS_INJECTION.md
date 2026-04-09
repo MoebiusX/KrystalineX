@@ -7,31 +7,31 @@ The chaos injection system creates realistic failure conditions that trigger the
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                        Request Pipeline                          │
-│                                                                  │
-│  Client → Rate Limiter → Metrics MW → ┌──────────────────┐       │
-│                                       │  Chaos Middleware │       │
-│                                       │  (chaos.ts)      │       │
-│                                       │                  │       │
-│                                       │  ┌─ delay? ──→ setTimeout(next) │
-│                                       │  ├─ error? ──→ res.status(5xx)  │
-│                                       │  └─ neither → next()            │
-│                                       └──────────────────┘       │
-│                                              ↓                   │
-│                                       Domain Routes              │
-│                                       (trade/wallet/auth)        │
-└───────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Request Pipeline                                     │
+│                                                                             │
+│  Client → Rate Limiter → Metrics MW → ┌──────────────────┐                  │
+│                                       │ Chaos Middleware │                  │
+│                                       │  (chaos.ts)      │                  │
+│                                       │                  │                  │
+│                                       │  ┌─ delay? ──→ setTimeout(next)     │
+│                                       │  ├─ error? ──→ res.status(5xx)      │
+│                                       │  └─ neither → next()                │
+│                                       └──────────────────┘                  │
+│                                              ↓                              │
+│                                       Domain Routes                         │
+│                                       (trade/wallet/auth)                   │          
+└─────────────────────────────────────────────────────────────────────────────┘
          ↓ latency/errors recorded by metrics middleware
 ┌───────────────────────────────────────────────────────────────────┐
 │                    Observability Pipeline                         │
-│                                                                  │
-│  Prometheus ──→ Alert Rules ──→ Alertmanager ──→ GoAlert/Slack   │
-│  OTEL Spans ──→ Jaeger ──→ Anomaly Detector ──→ WebSocket       │
-│                                ↓                                 │
-│                          Stream Analyzer (Ollama LLM)            │
-│                                ↓                                 │
-│                          Root-Cause Analysis                     │
+│                                                                   │
+│  Prometheus ──→ Alert Rules ──→ Alertmanager ──→ GoAlert/Slack    │
+│  OTEL Spans ──→ Jaeger ──→ Anomaly Detector ──→ WebSocket         │
+│                                ↓                                  │
+│                          Stream Analyzer (Ollama LLM)             │
+│                                ↓                                  │
+│                          Root-Cause Analysis                      │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -239,10 +239,10 @@ curl -X POST http://localhost:5000/api/v1/monitor/chaos/stop \
 ### Anomaly Detection Path
 
 1. Chaos middleware injects delays → recorded in OTEL spans
-2. Jaeger receives spans → Trace Profiler polls every 30s
-3. Anomaly Detector runs Welford's online algorithm against 168 hourly baselines (7 days × 24 hours)
+2. Jaeger receives spans → Trace Profiler polls every 30s (baselines frozen during chaos)
+3. Anomaly Detector checks each span against baselines (min 10 samples required)
 4. Latency exceeding adaptive σ thresholds → anomaly created with severity:
-   - **SEV 5**: 6.6σ | **SEV 4**: 9.3σ | **SEV 3**: 12.0σ | **SEV 2**: 17.2σ | **SEV 1**: 20.6σ
+   - **SEV 5**: 3.0σ | **SEV 4**: 4.0σ | **SEV 3**: 5.0σ | **SEV 2**: 6.0σ | **SEV 1**: 8.0σ
 5. SEV 1–3 anomalies → forwarded to Ollama for LLM root-cause analysis
 6. Analysis streamed over WebSocket (`/ws/monitor`) → dashboard updates live
 

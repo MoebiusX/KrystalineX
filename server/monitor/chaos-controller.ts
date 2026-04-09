@@ -9,6 +9,7 @@
  */
 
 import { createLogger } from '../lib/logger';
+import { traceProfiler } from './trace-profiler';
 
 const logger = createLogger('chaos-controller');
 
@@ -209,6 +210,9 @@ class ChaosController {
             '🔥 Chaos scenario STARTED'
         );
 
+        // Freeze baselines so anomaly detector compares against pre-chaos values
+        traceProfiler.freezeBaselines();
+
         return { ...this.config };
     }
 
@@ -282,6 +286,7 @@ class ChaosController {
 
         if (wasEnabled) {
             logger.info('✅ Chaos injection STOPPED — system returning to normal');
+            traceProfiler.unfreezeBaselines();
         }
 
         return { ...this.config };
