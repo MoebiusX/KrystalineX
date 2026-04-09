@@ -271,7 +271,8 @@ describe('Monitor Routes', () => {
                 .send({ traceId: 'new-trace' });
 
             expect(response.status).toBe(200);
-            expect(response.body).toHaveProperty('summary');
+            expect(response.body.status).toBe('processing');
+            expect(response.body.traceId).toBe('new-trace');
         });
     });
 

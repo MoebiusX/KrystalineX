@@ -104,28 +104,24 @@ router.get('/history', async (req, res) => {
  * Trigger LLM analysis for a trace
  */
 router.post('/analyze', async (req, res) => {
-    // Override global 30s timeout — F16 model on CPU takes ~4-5 minutes
-    res.setTimeout(330000);
-
     const { traceId, anomalyId } = req.body;
 
     if (!traceId) {
         return res.status(400).json({ error: 'traceId is required' });
     }
 
-    // Check for cached analysis
+    // Check for cached analysis — return immediately if available
     const cached = historyStore.getAnalysis(traceId);
     if (cached) {
         return res.json(cached);
     }
 
-    // Find the anomaly
+    // Find the anomaly or create a synthetic one
     const anomalies = anomalyDetector.getActiveAnomalies();
-    const anomaly = anomalies.find(a => a.traceId === traceId || a.id === anomalyId);
+    let anomaly = anomalies.find(a => a.traceId === traceId || a.id === anomalyId);
 
     if (!anomaly) {
-        // Create a synthetic anomaly for analysis
-        const syntheticAnomaly = {
+        anomaly = {
             id: traceId,
             traceId,
             spanId: 'unknown',
@@ -140,30 +136,19 @@ router.post('/analyze', async (req, res) => {
             timestamp: new Date(),
             attributes: {}
         };
-
-        const { analysisService } = await import('./analysis-service');
-        const analysis = await analysisService.analyzeAnomaly(syntheticAnomaly);
-        return res.json(analysis);
     }
 
-    // Fetch full trace for context
-    let fullTrace;
-    try {
-        const jaegerUrl = process.env.JAEGER_URL || 'http://localhost:16686';
-        const traceResponse = await fetch(`${jaegerUrl}/api/traces/${traceId}`);
-        if (traceResponse.ok) {
-            const data = await traceResponse.json();
-            fullTrace = data.data?.[0];
-        }
-    } catch (error) {
-        // Continue without trace context
-    }
+    // Enqueue into stream analyzer — results arrive via WebSocket
+    // This returns immediately instead of blocking for 2-3 minutes
+    const { streamAnalyzer } = await import('./stream-analyzer');
+    await streamAnalyzer.enqueue(anomaly);
 
-    // Analyze with Ollama
-    const { analysisService } = await import('./analysis-service');
-    const analysis = await analysisService.analyzeAnomaly(anomaly, fullTrace);
-
-    res.json(analysis);
+    res.json({
+        status: 'processing',
+        message: 'Analysis enqueued — results will stream via WebSocket',
+        traceId,
+        anomalyId: anomaly.id
+    });
 });
 
 /**
