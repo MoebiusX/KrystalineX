@@ -112,6 +112,10 @@ spec:
             - name: ENABLE_BAYESIAN_INFERENCE
               value: "true"
             {{- end }}
+            {{- if .Values.server.env.CHAOS_API_KEY }}
+            - name: CHAOS_API_KEY
+              value: {{ .Values.server.env.CHAOS_API_KEY | quote }}
+            {{- end }}
           {{- with .Values.server.startupProbe }}
           startupProbe:
             {{- toYaml . | nindent 12 }}

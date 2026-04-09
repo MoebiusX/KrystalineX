@@ -15,7 +15,7 @@ server:
   replicaCount: 1
   image:
     repository: moebiusx/krystalinex-server
-    tag: v3.0.0
+    tag: v3.1.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -37,6 +37,7 @@ server:
   env:
     NODE_ENV: production
     PORT: "5000"
+    CHAOS_API_KEY: "demo-chaos-key"
   # These will be injected from secrets
   envFromSecrets:
     - name: krystalinex-secrets
@@ -97,7 +98,7 @@ frontend:
   replicaCount: 1
   image:
     repository: moebiusx/krystalinex-frontend
-    tag: v3.0.0
+    tag: v3.1.0
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
